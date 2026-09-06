@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 **Date:** 2026-08-24
 **Status:** in progress; current-origin G0 and the narrow `knot-document`
@@ -28,7 +28,7 @@ plugin API.
 - [Knot in Graphshell plan](2026-08-02_knot_in_graphshell_plan.md)
 - [Device resident consolidation plan](2026-08-20_device_resident_consolidation_plan.md)
 - [Configuration ownership and settings projection plan](2026-08-06_configuration_ownership_settings_projection_plan.md)
-- Turnstone `design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md`
+- Turnstone `design_docs/2026-08-08_pane_registry_and_graph_panes_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->
 - Genet `docs/2026-08-12_meristem_scope_cut_and_component_contract_brief.md`
 
 ## 1. Ruling
@@ -111,7 +111,7 @@ superseded format assumption.
 
 Genet's `knot-editor-host::KnotEditor` already owns the authority-free
 `TextInput`, dirty baseline, edit commands, and derived readout, and Turnstone
-uses it. `ports/knot::KnotEditor` independently repeats that state while adding
+uses it. `ports/knot::KnotEditor` *(historical citation)* <!-- doc-audit: historical-path --> independently repeats that state while adding
 file authority. K0 changes the port editor into a file-authority wrapper around
 the Genet model. The new document session composes that wrapper; it does not
 create a third source buffer or editor core.
@@ -165,7 +165,7 @@ generic runtime effect.
 
 ### 2026-08-25: the small surface still pays for the broad port graph
 
-An external verification crate depending only on `ports/knot` and the desktop
+An external verification crate depending only on `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> and the desktop
 host still spends dependency resolution on Knot's full ordinary dependency
 set. Both the branch-sourced Genet run and an exact clean-current-origin
 checkout run remained in Cargo resolution without reaching `rustc` inside the
@@ -392,9 +392,9 @@ Turnstone, `sceno::Scene`, winit, or platform AccessKit adapters.
 
 ### K0. Narrow Knot document snapshot, intent, and session
 
-**Owner:** Mere `ports/knot`.
+**Owner:** Mere `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->.
 **Files:** `ports/knot/src/{lib.rs,document_surface.rs}` and the smallest
-necessary additions to `ports/knot/src/editor.rs` only.
+necessary additions to `ports/knot/src/editor.rs` *(historical citation)* <!-- doc-audit: historical-path --> only.
 **Runs beside:** G0.
 
 Implement the first product model over the existing `KnotEditor`. The session
@@ -594,8 +594,8 @@ through UI admission.
   verification bound. The implementation remains local for focused
   publication; the published-source receipt and the dependency-breadth choice
   remain open before T0.
-- 2026-08-25: extracted `ports/knot-document` and the excluded
-  `ports/knot/desktop` wrapper. The broad port preserves its API through
+- 2026-08-25: extracted `ports/knot-document` *(historical citation)* <!-- doc-audit: historical-path --> and the excluded
+  `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> wrapper. The broad port preserves its API through
   re-exports and enables the optional engine conversion layer. An independent
   exact-current-origin verifier passed five default tests and eleven engine
   tests. This closes the dependency-breadth choice and local source receipt;

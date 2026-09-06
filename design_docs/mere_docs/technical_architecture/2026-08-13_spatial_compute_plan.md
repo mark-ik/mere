@@ -179,7 +179,7 @@ exact and fixed-point planes are the record's side; everything else is
 projection.
 
 First application is the wing's voxel ground (mesocosm
-`design_docs/2026-08-14_resident_views_composition_plan.md`, which also
+`mesocosm/design_docs/2026-08-14_resident_views_composition_plan.md`, which also
 carries the **conatus-side lane briefs**: the `ResidentChunk` seam as a
 quint module, the nexus LBVH/radix harvest, and the CubeCL carriage
 decision, each with its ownership boundary): mesocosm's `Ground` already
@@ -242,7 +242,7 @@ The existing CPU Barnes-Hut stands as the downlevel tier.
 CPU traffic bounded to flags, receipts recorded beside the CPU path's
 numbers on the same machine.
 
-**Spike landed 2026-08-13** (`crates/probes/resident-graph`, standalone
+**Spike landed 2026-08-13** (`crates/probes/resident-graph` *(historical citation)* <!-- doc-audit: historical-path -->, standalone
 probe). Positions and velocities resident as padded 3D `vec4f`; three
 WGSL dispatches per frame (tiled all-pairs repulsion, springs by CSR
 gather with no float atomics, damped symplectic Euler with the settle

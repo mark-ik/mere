@@ -128,7 +128,7 @@ seam, per-target backend, gated by the `net` grant (default-denied, §6 consent)
 
 ## 3. The orrery seam is already cut
 
-The host-DOM-card fork is not new work to invent. `crates/orrery/orrery/src/lib.rs`
+The host-DOM-card fork is not new work to invent. `crates/orrery/orrery/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 already carries `render_as_cards` (field at :228, setter at :954) with the full set
 of per-node accessors a host needs to draw cards: `node_color`, `node_state_color`,
 `node_selected`, `node_shape`, `node_position`, `node_representation`. Its own doc:
@@ -280,7 +280,7 @@ cartography).
   dir. **Residual watch**, not a blocker: keep the native host and the jco bindings on the same
   world (no browser-only fork — layer any browser divergence, e.g. a `net.fetch` backend contract,
   without editing the shared world), or the contract silently splits. The stale probe copy at
-  `crates/probes/document-script-p0/wit/` is gitignored and not load-bearing.
+  `crates/probes/document-script-p0/wit/` *(historical citation)* <!-- doc-audit: historical-path --> is gitignored and not load-bearing.
 
 ## Progress
 

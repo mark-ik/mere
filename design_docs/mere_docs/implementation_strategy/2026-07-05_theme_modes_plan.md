@@ -5,8 +5,8 @@
 graduation open). From Mark's theme-model decision (2026-07-05), unblocking the W3C adoption
 plan's P3 host half.
 **Related**: `repos/genet/docs/2026-07-05_w3c_mechanism_adoption_plan.md` (P3 engine half landed:
-`IncrementalLayout::set_prefers_color_scheme`), `repos/tincture` (tinct seed-to-palette
-derivation), `crates/meerkat/src/theme_sheets.rs` + `theme_edit.rs` (current sheet baking +
+`IncrementalLayout::set_prefers_color_scheme`), `repos/tincture` *(historical citation)* <!-- doc-audit: historical-path --> (tinct seed-to-palette
+derivation), `crates/meerkat/src/theme_sheets.rs` *(historical citation)* <!-- doc-audit: historical-path --> + `theme_edit.rs` (current sheet baking +
 switch path).
 
 ## The model (decision record)
@@ -49,7 +49,7 @@ switch path).
 - `Mode { Light, Dark, HcLight, HcDark, Custom(id) }` in the presentation layer; tinct grows
   per-mode derivation (replace `Seeds.dark: bool` at the call boundary with a profile:
   lightness ladder direction + contrast spread; tinct API change is upstream-first in
-  repos/tincture since Woodshed/Strophe share it).
+  `repos/tincture` *(historical citation)* <!-- doc-audit: historical-path --> since Woodshed/Strophe share it).
 - **Done when** the four canonical modes derive distinct, sane palettes from one seed set in a
   tinct unit test (hc modes measurably wider text/surface contrast, e.g. an APCA/WCAG floor).
 
@@ -110,7 +110,7 @@ T4 and T5 ride settings passes; T5 last.
 
 - 2026-07-05: decision recorded, plan written. Engine prerequisite (scheme flip) already landed
   genet-side.
-- 2026-07-05: **T1 landed.** tinct (repos/tincture, v0.1.1 NOT YET PUBLISHED — Mark's call):
+- 2026-07-05: **T1 landed.** tinct (`repos/tincture` *(historical citation)* <!-- doc-audit: historical-path -->, v0.1.1 NOT YET PUBLISHED — Mark's call):
   `ModeProfile { dark, high_contrast }` with `LIGHT/DARK/HC_LIGHT/HC_DARK` consts +
   `derive_palette_with`; hc ladders push surfaces toward the extremes, text past them, and
   tighten the dim/disabled blend; `derive_palette(seeds)` unchanged as the degenerate form.

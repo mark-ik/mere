@@ -63,7 +63,7 @@ share the shape.
 | 2 | Scripted DOM | `NodeId`-keyed arena, slots never reused, debug doc-tag fence in high bits | `NodeKind` | `DomMutation` stream via `drain_mutations` | `genet:components/genet-scripted-dom` |
 | 3 | Box/fragment tree | layout arena over the DOM holding `Arc<ComputedValues>` per node; Taffy traverses via trait impls | display/box kind | `RestyleDamage` per batch | `genet:components/genet-layout` (`box_tree.rs`, `incremental.rs`) |
 | 4 | Xilem view layer | retained view tree diffed against app state | view type | diff → `DomMutation`s (eager apply, batch at relayout boundary) | `genet:components/xilem-serval` |
-| 5 | netrender Scene | flat op list + font/transform/image palettes keyed by id | `SceneOp` variant | per-frame ops; asset bytes sent once by id; postcard capture/replay | netrender repo; transport in [transfer.rs](../crates/meerkat/src/content/transfer.rs) |
+| 5 | netrender Scene | flat op list + font/transform/image palettes keyed by id | `SceneOp` variant | per-frame ops; asset bytes sent once by id; postcard capture/replay | netrender repo; transport in [transfer.rs](../crates/meerkat/src/content/transfer.rs) *(historical citation)* <!-- doc-audit: historical-link --> |
 | 6 | Orrery graph | petgraph `StableGraph` (arena-backed, stable indices) | node/edge taxonomy | `history.rs` + two-phase `apply.rs` | [graph-kernel](../crates/graph/graph-kernel/src/graph/) |
 | 7a | *prospective:* DocumentScript mutation contract | coarse mutation variants over a flat canonical ABI | variant tag | per-turn batched contract | D-doc §10.2/§10.3 |
 | 7b | *prospective:* Nova-wasm | wasm modules/instances/memories as new heap kinds; `externref` = `Value`; one GC over JS + wasm | heap-kind tag | same GC | upstream intent (repo tagline); fork README still lists wasm as unimplemented |
@@ -256,9 +256,9 @@ shared core.
   (D-doc §10.2/§10.3: the per-turn batched mutation contract, instance 7a).
 - genet repo: `components/script-engine-nova/lib.rs` (data-oriented `Value`,
   reflector bridge), `components/genet-scripted-dom/lib.rs` (NodeId arena,
-  mutation stream, doc-tag fence), `components/genet-layout/box_tree.rs` +
+  mutation stream, doc-tag fence), `components/genet-layout/box_tree.rs` *(historical citation)* <!-- doc-audit: historical-path --> +
   `incremental.rs` (layout arena, classify/coalesce, paint-only skip),
-  `components/xilem-serval/src/lib.rs` (view diff → DomMutation).
+  `components/xilem-serval/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path --> (view diff → DomMutation).
 - §6 item 7 (dormancy ladder): nova_vm
   `ecmascript/execution/agent.rs` (`GcAgent::snapshot_clone`,
   `Agent::clone_for_snapshot`) and `heap.rs` (`Heap::clone`) for the

@@ -20,7 +20,7 @@ WASM layout mods.
 [browser WebRTC carrier plan](2026-08-25_browser_webrtc_carrier_plan.md)
 (the web host and the scenario lane the receipts run on).
 Donor sources, read 2026-09-02 from the archive (`mark-ik/graphshell`,
-branch `webrender-wgpu-branch`, `design_docs/graphshell_docs/implementation_strategy/`):
+branch `webrender-wgpu-branch`, `design_docs/graphshell_docs/implementation_strategy/` *(historical citation)* <!-- doc-audit: historical-path -->):
 `canvas/2026-02-24_physics_engine_extensibility_plan.md` (the Layout
 Algorithm Reference Table and the Ten Thematic/Topological Physics
 Presets), `canvas/layout_algorithm_portfolio_spec.md`,

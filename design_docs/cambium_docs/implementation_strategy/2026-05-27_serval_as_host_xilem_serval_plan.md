@@ -29,7 +29,7 @@ confusion comes from blurring them.
 
 1. **serval-as-texture-in-a-host.** serval renders a document to a wgpu
    texture; a host framework (Xilem today) composites it. This is what
-   [pelt-viewer](../ports/pelt-viewer/render.rs) does for content now.
+   [pelt-viewer](../ports/pelt-viewer/render.rs) *(historical citation)* <!-- doc-audit: historical-link --> does for content now.
    The host owns the chrome; serval owns the content. This is the right
    division of labor while Xilem works, and nothing here proposes
    changing it.
@@ -57,7 +57,7 @@ A reactive layer's only job is **app state → a view tree → diff →
 mutation calls** (`createElement`, `setAttribute`, `insertBefore`,
 `removeChild`, attach listener). It does no layout, paint, or
 hit-testing. So taking *only* that piece and pointing it at serval's
-[`LayoutDomMut`](../components/shared/layout-dom/lib.rs) keeps serval the
+[`LayoutDomMut`](../../../../genet/components/shared/layout-dom/lib.rs) keeps serval the
 sole engine. This is not architecture (2): there is no second layout
 engine, only a state-to-mutations differ. Dropping the host framework's
 *renderer* while keeping its *reactive core* is exactly what sidesteps
@@ -65,7 +65,7 @@ the double-engine trap.
 
 `xilem_core` is built for this. It is `#![no_std]` and references no
 `web_sys`; it already drives two backends in the fork at
-`crates/xilem`: `xilem` (native, → Masonry) and `xilem_web` (→ the
+`crates/xilem` *(historical citation)* <!-- doc-audit: historical-path -->: `xilem` (native, → Masonry) and `xilem_web` (→ the
 browser DOM via `web_sys`). `xilem_web` is the proof that a DOM-shaped
 backend is a supported target. `xilem_serval` is a third backend pointed
 at serval's DOM, with `xilem_web` as the line-for-line template.
@@ -86,7 +86,7 @@ regardless.
 
 ## The `xilem_core` backend contract
 
-A backend supplies (signatures from `crates/xilem/xilem_core`):
+A backend supplies (signatures from `crates/xilem/xilem_core` *(historical citation)* <!-- doc-audit: historical-path -->):
 
 - A `Context: ViewPathTracker` holding the `id_path` (message routing),
   an `Environment`, plus backend state.
@@ -127,8 +127,8 @@ larger shared capability (input) remain.
 `ElementSplice::insert` inserts *before the cursor's next sibling*, not at
 the end (`xilem_web` calls `parent.insert_before(node, next)`). With only
 `append_child`, mid-list insertion forces O(n) churn and records the wrong
-mutations. So [`LayoutDomMut`](../components/shared/layout-dom/lib.rs) and
-[`ScriptedDom`](../components/serval-scripted-dom/lib.rs) need:
+mutations. So [`LayoutDomMut`](../components/shared/layout-dom/lib.rs) *(historical citation)* <!-- doc-audit: historical-link --> and
+[`ScriptedDom`](../components/serval-scripted-dom/lib.rs) *(historical citation)* <!-- doc-audit: historical-link --> need:
 
 ```rust
 /// Insert `child` immediately before `reference` under `parent`
@@ -152,7 +152,7 @@ this is shared groundwork, not a detour.
 
 `xilem_web` gets events for free: the browser hit-tests and dispatches.
 `xilem_serval` has no browser, but serval is further along than "no
-hit-test." [`ServalLaneView`](../components/serval-layout/serval_lane.rs)
+hit-test." [`ServalLaneView`](../components/serval-layout/serval_lane.rs) *(historical citation)* <!-- doc-audit: historical-link -->
 already implements `FragmentQuery::hit_test` (part of
 `engine_observables_api`): it walks fragments in paint order and returns
 the topmost `FragmentHit { source_node: SourceNodeId, local_point, .. }`
@@ -170,7 +170,7 @@ piece is **wiring, not a new spatial index**:
    MessageThunk` registry that `xilem_serval` populates in its `Context`.
    This must **converge with**, not fork from, the capture/target/bubble
    algorithm the scripting tier already runs in JS-bootstrap form in
-   [script-runtime-api/dom.rs](../components/script-runtime-api/dom.rs)
+[script-runtime-api/dom.rs](../components/script-runtime-api/dom.rs) *(historical citation)* <!-- doc-audit: historical-link -->
    (W0c). One event model, two entry points (native handlers and JS
    listeners), one propagation algorithm.
 3. **The window → lane wiring.** A pelt host pointer event feeds
@@ -381,7 +381,7 @@ already exposes (`run_microtasks`, `run_event_loop`).
 
 ## Toward the Mere flip gate: IME + form-control breadth
 
-Mere's [serval-as-host decision brief](../../mere/design_docs/mere_docs/technical_architecture/2026-05-29_serval_as_host_evaluation.md)
+Mere's [genet-as-host decision brief](../../archive_docs/2026-06-09_completed_plans/2026-05-29_genet_as_host_evaluation.md)
 gates flipping Mere's chrome onto serval on serval reaching Masonry's
 interactive bar — concretely **IME + form-control breadth + the orrery
 element decision** (its §8). The orrery is Mere-side; the two pieces this
@@ -466,7 +466,7 @@ Three open items — **real caret painting**, **IME candidate placement**
 (T3 above), and **text selection** (form T3) — all need the same primitive:
 *the screen rect of a character offset within a text node's laid-out run.*
 serval already caches the `parley::Layout` per text leaf
-([text_measure.rs](../components/serval-layout/text_measure.rs)); the
+([text_measure.rs](../components/serval-layout/text_measure.rs) *(historical citation)* <!-- doc-audit: historical-link -->); the
 primitive is a query over it (parley's cursor/selection geometry) returning
 a rect for `(text node, byte offset)`. Building it once unblocks all three,
 so it is the natural next serval-layout addition when this gate work starts —
@@ -489,10 +489,10 @@ the reactive layer.
 
 ## Crate placement
 
-A backend *library* crate (e.g. `components/xilem-serval`, or a sibling
+A backend *library* crate (e.g. `components/xilem-serval` *(planned target)* <!-- doc-audit: planned-path -->, or a sibling
 location if it should sit nearer the host than the engine) consumed by a
-`pelt` example host. serval already depends on the `crates/xilem` fork
-(via [pelt-viewer](../ports/pelt-viewer/Cargo.toml)), so the dependency
+`pelt` example host. serval already depends on the `crates/xilem` *(historical citation)* <!-- doc-audit: historical-path --> fork
+(via [pelt-viewer](../ports/pelt-viewer/Cargo.toml) *(historical citation)* <!-- doc-audit: historical-link -->), so the dependency
 direction is established, and an Xilem-authored example beside the static
 viewer fits pelt's multi-host-reference role. One maintenance cost to name
 plainly: `xilem_core`'s API churns, so the backend tracks it; the fork is
@@ -505,18 +505,18 @@ local, so the pace is ours to set.
   Both are gated on the same Gap 2 (wiring the existing hit-test into
   native dispatch). The scripted tier's W0 (DOM surface, node-level
   `EventTarget`) is in
-  [2026-05-26_pluggable_engines_testharness_plan.md](./2026-05-26_pluggable_engines_testharness_plan.md);
+  [2026-05-26_pluggable_engines_testharness_plan.md](../../../../genet/docs/2026-05-26_pluggable_engines_testharness_plan.md);
   its capture/target/bubble `EventTarget` algorithm in
-  [script-runtime-api/dom.rs](../components/script-runtime-api/dom.rs) is
+  [script-runtime-api/dom.rs](../components/script-runtime-api/dom.rs) *(historical citation)* <!-- doc-audit: historical-link --> is
   the JS twin of Gap 2's native dispatch, and the two must converge on one
   event model rather than fork.
 - The **Blitz/serval convergence** thesis (serval as a Blitz-shaped
   modular engine) is what architecture (3) realizes; this doc is the
   authoring-layer half of that bet.
-- [2026-05-25_web_platform_api_shared_middle_plan.md](./2026-05-25_web_platform_api_shared_middle_plan.md)
+- [2026-05-25_web_platform_api_shared_middle_plan.md](../../../../genet/docs/2026-05-25_web_platform_api_shared_middle_plan.md)
   and the pluggable-engines plan own the DOM/JS surface `xilem_serval`
   mutates; this doc consumes that surface natively rather than through JS.
-- [2026-05-25_js_execution_strategy.md](./2026-05-25_js_execution_strategy.md)
+- [2026-05-25_js_execution_strategy.md](../../../../genet/docs/2026-05-25_js_execution_strategy.md)
   must be read alongside this, because "scripting" and "app UI" are
   different axes. `xilem_serval` is **Rust app-authoring**, independent of
   any JS engine; the engine axis stays native Nova-first with wasm moving

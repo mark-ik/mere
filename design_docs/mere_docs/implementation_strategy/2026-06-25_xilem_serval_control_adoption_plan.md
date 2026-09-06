@@ -16,7 +16,7 @@ stamp. The a11y bridge already ignores stamped ARIA per the grand audit (`grand_
 host hand-rolled rows have no role/state for a screen reader.
 
 Specifics:
-- **`button`** — 15 chrome buttons in [views.rs](../../../crates/meerkat/src/views.rs) hand-roll
+- **`button`** — 15 chrome buttons in [views.rs](../../../crates/meerkat/src/views.rs) *(historical citation)* <!-- doc-audit: historical-link --> hand-roll
   `on_click(el("button", label), handler)`, which is verbatim what `xilem_serval::button` wraps
   (`controls.rs:685`, whose own doc says it is "the ergonomic form of" that pattern).
 - **`radio_group`** — every single-selection settings picker (node Face, theme Harmony, body/code font,

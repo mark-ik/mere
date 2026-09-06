@@ -172,7 +172,7 @@ Done conditions:
 - One AccessKit tree covers chrome plus all document panes (today each pane
   projects its own).
 - The per-pane hit-test and the Y-band input branches for roster / apparatus /
-  utility panes in `crates/meerkat/src/input.rs` collapse into one document
+  utility panes in `crates/meerkat/src/input.rs` *(historical citation)* <!-- doc-audit: historical-path --> collapse into one document
   hit-test.
 - Behaviour parity: existing pane intents (`RosterIntent`, `ListPane`
   activations) still fire; theme switch still restyles.
@@ -180,7 +180,7 @@ Done conditions:
 Notes:
 
 - `ViewPane` already centralizes the runner + `PaneSession` + sheet bundle
-  (`crates/meerkat/src/view_pane.rs`), and each instance builds its own
+  (`crates/meerkat/src/view_pane.rs` *(historical citation)* <!-- doc-audit: historical-path -->), and each instance builds its own
   `ScriptedDom` (`ViewPane::new`, view_pane.rs:50). The work is to compose the
   per-pane states into one `ShellState` and one root view (the shell container),
   not one runner per pane.
@@ -519,7 +519,7 @@ targeted reads:
 
 - **`xilem_serval` is the chrome's reactive layer.** `chrome_view(c: &Chrome)`
   returns `Box<dyn AnyView<Chrome, (), GenetCtx, GenetElement>>`
-  (`crates/meerkat/src/views.rs`); one `GenetAppRunner` per window diffs it into
+  (`crates/meerkat/src/views.rs` *(historical citation)* <!-- doc-audit: historical-path -->); one `GenetAppRunner` per window diffs it into
   the chrome `ScriptedDom`.
 - **Each document pane is its own document and runner.** `ViewPane::new` builds a
   fresh `ScriptedDom` and a `GenetAppRunner` per pane (view_pane.rs:50); roster,
@@ -529,8 +529,8 @@ targeted reads:
 - **The canvas surfaces bypass `xilem_serval` entirely.** Orrery, workbench
   tiles, gloss, and content cards render straight to `netrender::Scene`s. Meerkat
   produces roughly 7 to 10 scenes per frame and stitches them by Y-coordinate
-  band (`crates/meerkat/src/render.rs`), with about five independent hit-test
-  entry points and disjoint focus models (`crates/meerkat/src/input.rs`,
+  band (`crates/meerkat/src/render.rs` *(historical citation)* <!-- doc-audit: historical-path -->), with about five independent hit-test
+  entry points and disjoint focus models (`crates/meerkat/src/input.rs` *(historical citation)* <!-- doc-audit: historical-path -->,
   documented at input.rs:60-64). There is no unified focus ring or Tab order, and
   the a11y tree is fragmented (orrery nodes appear only as their visual cards).
 - **The only in-tree non-DOM bridge is output-only.** `<external-texture>` is a
@@ -629,7 +629,7 @@ original four resolve or narrow; resolutions are reflected in the phase notes ab
   open items: focus / `Tab` order across chrome and panes, and composed-view rebuild
   cost vs `xilem` memoization. No code written.
 - **2026-06-17 (Phase 1 spike)** — Container-root mechanism proven in a passing test
-  (`crates/meerkat/src/tests.rs`, `shell_container_hosts_chrome_and_pane_under_one_runner`):
+  (`crates/meerkat/src/tests.rs` *(historical citation)* <!-- doc-audit: historical-path -->, `shell_container_hosts_chrome_and_pane_under_one_runner`):
   one `GenetAppRunner` hosts the real `chrome_view` plus a second pane as two
   `lens`-composed subtrees of a single "shell" container root in one `ScriptedDom`; both
   surfaces coexist in the one document, and a dispatched click routes through the single

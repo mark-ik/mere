@@ -63,7 +63,7 @@ adopting a stack wholesale.
 
 **Fit.**
 - Scope = a subgraph. The
-  [graph-cluster namespaces](../research/2026-05-10_graph_cluster_namespaces_brief.md)
+  [graph-cluster namespaces](2026-05-10_graph_cluster_namespaces_brief.md)
   brief already maps community-derived namespaces to a capability scope, so a share is a
   grant over a namespace, not an ad-hoc node set.
 - The grant dovetails with **Tessera** as the trust receipt and with the tier framework
@@ -94,7 +94,7 @@ both are scoped here so the design is settled before federation data starts flow
   layer the lenses extend.
 - [event_dag_substrate brief](2026-05-07_event_dag_substrate_brief.md): p2panda, the
   federation substrate.
-- [graph-cluster namespaces brief](../research/2026-05-10_graph_cluster_namespaces_brief.md):
+ - [graph-cluster namespaces brief](2026-05-10_graph_cluster_namespaces_brief.md):
   namespace = capability scope.
 - [capability-gate catalogue brief](../research/2026-05-14_capability_gate_catalogue_brief.md),
   [document_script_substrate plan](../../archive_docs/2026-07-03_completed_plans/2026-06-21_document_script_substrate_plan.md): the

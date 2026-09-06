@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/graphshell_docs/research/2026-03-30_middlenet_vision_synthesis.md`
+> - Original path: `design_docs/graphshell_docs/research/2026-03-30_middlenet_vision_synthesis.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `401e2fcc`
 >
 > None of it was ever built as written. It is filed here as research, not as a
@@ -39,18 +39,18 @@
 
 **Related docs**:
 
-- [`../technical_architecture/2026-03-29_middlenet_engine_spec.md`](../technical_architecture/2026-03-29_middlenet_engine_spec.md)
-- [`../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md`](../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md)
-- [`../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md`](../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md)
-- [`../technical_architecture/2026-04-09_identity_convergence_and_person_node_model.md`](../technical_architecture/2026-04-09_identity_convergence_and_person_node_model.md)
-- [`../technical_architecture/2026-04-09_graphshell_verse_uri_scheme.md`](../technical_architecture/2026-04-09_graphshell_verse_uri_scheme.md)
-- [`../technical_architecture/GRAPHSHELL_AS_BROWSER.md`](../technical_architecture/GRAPHSHELL_AS_BROWSER.md)
-- [`../technical_architecture/2026-03-08_graphshell_core_extraction_plan.md`](../technical_architecture/2026-03-08_graphshell_core_extraction_plan.md)
-- [`../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md`](../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md)
-- [`../../verso_docs/research/2026-03-28_smolnet_dependency_health_audit.md`](../../verso_docs/research/2026-03-28_smolnet_dependency_health_audit.md)
-- [`../implementation_strategy/system/2026-03-05_network_architecture.md`](../implementation_strategy/system/2026-03-05_network_architecture.md)
-- [`../../verso_docs/implementation_strategy/coop_session_spec.md`](../../verso_docs/implementation_strategy/coop_session_spec.md)
-- [`../../matrix_docs/implementation_strategy/2026-03-17_matrix_layer_positioning.md`](../../matrix_docs/implementation_strategy/2026-03-17_matrix_layer_positioning.md)
+- [`../technical_architecture/2026-03-29_middlenet_engine_spec.md`](./2026-03-29_middlenet_engine_spec.md)
+- [`../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md`](../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md`](../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../technical_architecture/2026-04-09_identity_convergence_and_person_node_model.md`](../technical_architecture/2026-04-09_identity_convergence_and_person_node_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../technical_architecture/2026-04-09_graphshell_verse_uri_scheme.md`](../technical_architecture/2026-04-09_graphshell_verse_uri_scheme.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../technical_architecture/GRAPHSHELL_AS_BROWSER.md`](../technical_architecture/GRAPHSHELL_AS_BROWSER.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../technical_architecture/2026-03-08_graphshell_core_extraction_plan.md`](../technical_architecture/2026-03-08_graphshell_core_extraction_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md`](../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../../verso_docs/research/2026-03-28_smolnet_dependency_health_audit.md`](../../verso_docs/research/2026-03-28_smolnet_dependency_health_audit.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../implementation_strategy/system/2026-03-05_network_architecture.md`](../implementation_strategy/system/2026-03-05_network_architecture.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../../verso_docs/implementation_strategy/coop_session_spec.md`](../../verso_docs/implementation_strategy/coop_session_spec.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [`../../matrix_docs/implementation_strategy/2026-03-17_matrix_layer_positioning.md`](../../matrix_docs/implementation_strategy/2026-03-17_matrix_layer_positioning.md) *(historical citation)* <!-- doc-audit: historical-link -->
 
 ---
 
@@ -76,7 +76,7 @@ This document separates those layers.
 
 Some conclusions first surfaced here have now been promoted into canonical
 architecture policy in
-[`2026-03-30_protocol_modularity_and_host_capability_model.md`](../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md).
+[`2026-03-30_protocol_modularity_and_host_capability_model.md`](../technical_architecture/2026-03-30_protocol_modularity_and_host_capability_model.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 This file should remain a synthesis and critique surface, not a rival policy
 authority.
 
@@ -135,21 +135,21 @@ The current docs already establish several strong and unusually coherent positio
 
 This is one of the clearest strengths of the project.
 
-- [`GRAPHSHELL_AS_BROWSER.md`](../technical_architecture/GRAPHSHELL_AS_BROWSER.md) already states that pages/resources are graph-backed nodes, history is temporal rather than only back/forward, pane arrangement is workbench-owned, and viewer lifecycle is reconcile-driven.
+- [`GRAPHSHELL_AS_BROWSER.md`](../technical_architecture/GRAPHSHELL_AS_BROWSER.md) *(historical citation)* <!-- doc-audit: historical-link --> already states that pages/resources are graph-backed nodes, history is temporal rather than only back/forward, pane arrangement is workbench-owned, and viewer lifecycle is reconcile-driven.
 - This is the right foundation for a graph browser. It prevents the graph from collapsing into "fancy tab chrome."
 
 ### 3.2 One core, many hosts
 
 The portable host-envelope model is sound.
 
-- [`2026-03-29_portable_web_core_host_envelopes.md`](../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md) clearly adopts the mental model of **one singular portable web/document core** reused by many host envelopes.
+- [`2026-03-29_portable_web_core_host_envelopes.md`](../technical_architecture/2026-03-29_portable_web_core_host_envelopes.md) *(historical citation)* <!-- doc-audit: historical-link --> clearly adopts the mental model of **one singular portable web/document core** reused by many host envelopes.
 - That avoids the common mistake of treating native app, extension, and web build as separate products that merely share branding.
 
 ### 3.3 Middlenet as a content class, not a new protocol
 
 The middlenet framing is productively modest.
 
-- [`2026-03-29_middlenet_engine_spec.md`](../technical_architecture/2026-03-29_middlenet_engine_spec.md) correctly defines MiddleNet as an observation about a class of content rather than a new protocol.
+- [`2026-03-29_middlenet_engine_spec.md`](./2026-03-29_middlenet_engine_spec.md) correctly defines MiddleNet as an observation about a class of content rather than a new protocol.
 - The shared intermediate document model is the right architectural anchor for Gemini/Gopher/Finger/RSS/Markdown/static HTML.
 - **The intermediate document model is a rendering AST, not a user-facing format.** Each source format is parsed into this internal tree; the tree is a rendering target, not a richer protocol output.
 - **Each source format is rendered as itself.** Gemini content renders as gemtext; Gopher renders as a Gopher menu or document; Markdown renders as Markdown. The shared model is the internal parse target, not a reason to enrich or homogenize the output of any individual format. Gemtext's intentional minimalism is a deliberate design stance and should be respected.
@@ -178,7 +178,7 @@ through accidental drift away from the current Markdown baseline.
 
 The network architecture is already better-specified than many projects at this stage.
 
-- [`2026-03-05_network_architecture.md`](../implementation_strategy/system/2026-03-05_network_architecture.md) distinguishes three contextual substrates:
+- [`2026-03-05_network_architecture.md`](../implementation_strategy/system/2026-03-05_network_architecture.md) *(historical citation)* <!-- doc-audit: historical-link --> distinguishes three contextual substrates:
   - bilateral: iroh,
   - room: Matrix,
   - community: libp2p/Verse.
@@ -188,7 +188,7 @@ The network architecture is already better-specified than many projects at this 
 
 The co-op model is usefully constrained.
 
-- [`coop_session_spec.md`](../../verso_docs/implementation_strategy/coop_session_spec.md) keeps one host per session, keeps workbench layout local, and limits host authority to the shared co-op surface.
+- [`coop_session_spec.md`](../../verso_docs/implementation_strategy/coop_session_spec.md) *(historical citation)* <!-- doc-audit: historical-link --> keeps one host per session, keeps workbench layout local, and limits host authority to the shared co-op surface.
 - That is a strong product decision because it stops live collaboration from erasing the personal/local nature of the graph workspace.
 
 ---

@@ -3,7 +3,7 @@
 A code-verified sweep of capabilities that are **built but not reachable from a meerkat
 user action**, plus the table-stakes a browser still owes, plus the sequence that turns
 the first into the second. Every claim below carries a `file:line` and a check for whether
-anything in `crates/meerkat` actually calls it. Produced from a 10-agent audit (8 crate-cluster
+anything in `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path --> actually calls it. Produced from a 10-agent audit (8 crate-cluster
 scans + a browser table-stakes pass + a completeness critic) over the 56-crate workspace.
 
 Companion to [edge_system_audit](2026-06-13_edge_system_audit.md) (this supersedes its stale
@@ -377,5 +377,5 @@ The critic flagged where the audit's confidence was thinner. All five are now ve
 ---
 
 *Method: 8 crate-cluster scans + a browser table-stakes pass + a completeness critic, each
-evidence-bound to `file:line` with a check for a `crates/meerkat` caller. Grounded against the live
+evidence-bound to `file:line` with a check for a `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path --> caller. Grounded against the live
 tree, not the docs; where a doc claim and the code disagreed, the code was taken as truth (§3).*

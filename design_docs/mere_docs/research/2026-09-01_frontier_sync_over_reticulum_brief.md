@@ -29,7 +29,7 @@ two peers may never be online together.
   replication authority beneath stickleback is honoured by ruling 3.
 - Code: [`crates/stickleback/src/joined_space.rs`](../../../crates/stickleback/src/joined_space.rs)
   (the iroh-bound sync driver), [`crates/murm/transport/src/reticulum_transport.rs`](../../../crates/murm/transport/src/reticulum_transport.rs)
-  (the carrier), `crates/p2panda` under `Code/crates` (the fork surveyed).
+   (the carrier), `crates/p2panda` *(historical citation)* <!-- doc-audit: historical-path --> under `Code/crates` (the fork surveyed).
 
 ---
 

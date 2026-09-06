@@ -24,7 +24,7 @@ F3 channels (add, forced)     F4 pick (add, forced)   -> 0.0.3 release
 **Baseline.** 29 family tests green: sceno 13, scenomise 9, scenotime 7.
 Family is 2,113 LOC across four crates at 0.0.2. Live consumers are mere (by
 path), isometry and turnstone (git, `merely-made/mere` branch `main`), and mere's
-own `ports/graphshell`. The archived `repos/graphshell` still pins
+ own `ports/graphshell`. The archived `repos/graphshell` *(historical citation)* <!-- doc-audit: historical-path --> still pins
 `scenograph.git`, a repository the 2026-07-23 consolidation absorbed; that
 copy is dead (its last commit is "Archived: moved in the 2026-07-23 repo
 consolidation") and was not a release blocker, but no live work should be done
@@ -212,7 +212,7 @@ than deferred.
 - Replacing mere's seiche-backed picking with the scenotime default
 - Volumes, 3D footprints, or non-uniform transforms, which the note already
   gates on task-and-display evidence
-- Reviving the archived `repos/graphshell` copy or its stale `scenograph.git`
+- Reviving the archived `repos/graphshell` *(historical citation)* <!-- doc-audit: historical-path --> copy or its stale `scenograph.git`
   pin
 
 ## Verification wall

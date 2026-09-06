@@ -6,12 +6,12 @@ keyed-view, and incremental-layout code. Not a build plan yet; the sequencing at
 end names done conditions, not slices.
 **Related**: [multi_window_plan](../implementation_strategy/2026-06-10_multi_window_plan.md)
 (built the current N-runner shape this supersedes the framing of; MW1-MW3 machinery
-stays), [tearout_composability_plan](../implementation_strategy/2026-06-19_tearout_composability_plan.md)
+stays), [tearout_composability_plan](../../archive_docs/2026-07-04_completed_plans/2026-06-19_tearout_composability_plan.md)
 and [tearout_gestures_plan](../implementation_strategy/2026-06-24_tearout_gestures_plan.md)
 (the trichotomy this makes state-level), [swatch_primitive_design](2026-06-27_swatch_primitive_design.md)
 (swatches as view-instances over shared truth: the same shape one level down).
-Code receipts: `genet/components/xilem-serval/src/runner.rs` (the runner),
-`xilem-serval/src/keyed.rs` (keyed sequences), `genet/components/genet-layout/incremental.rs`
+Code receipts: `genet/components/xilem-serval/src/runner.rs` *(historical citation)* <!-- doc-audit: historical-path --> (the runner),
+`xilem-serval/src/keyed.rs` (keyed sequences), `genet/components/genet-layout/incremental.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 (`graft_subtree`, the splice path), `meerkat/src/shell_access.rs::build_window_view_for`
 (the sync-seeding exhibit), `meerkat/src/render/cards.rs::render_chrome_scene`
 (mutation routing by root, the miniature).
@@ -105,7 +105,7 @@ ratifies §3's topology: `moveBefore` throws across documents, so same-document
 is the only case, which is the case the forest dom creates. Chrome tear-out and
 a page reparenting a live iframe become the same engine code path. Genet keeps
 the full WPT suite on disk (`tests/wpt/tests/dom/nodes/moveBefore/`) wired into
-`ports/genet-wpt` with expectations currently `"fail"`, so done conditions are
+`genet/ports/genet-wpt` with expectations currently `"fail"`, so done conditions are
 expectation flips. Plan and slices:
 `repos/genet/docs/2026-07-05_movebefore_dom_standard_plan.md`.
 
@@ -192,7 +192,7 @@ between `shared` and `view`.
    window preserves its DOM nodes (same NodeId, scroll position observably
    survives), the target window's apply is scoped rather than a full recompute,
    and the trichotomy is expressed as state mutations. WPT expectation flips in
-   `ports/genet-wpt` gate the engine slices.
+   `genet/ports/genet-wpt` gate the engine slices.
    **Framework half done 2026-07-06** (genet plan S1-S5 all landed:
    `PortableKeyed` + ctx nursery + `(node, path)` handler reconciliation; a
    cross-parent keyed move preserves element, DOM node, view state, and live

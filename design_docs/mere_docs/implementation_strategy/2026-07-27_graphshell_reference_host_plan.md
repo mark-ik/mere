@@ -343,7 +343,7 @@ Keep the radio and transport implementations in the Retinue workspace. Moving
 them into Mere would erase Retinue's independent protocol/hardware boundary and
 would not solve a package cycle that does not exist.
 
-Add a small `ports/retinue-agent` package to the Retinue repository when the
+Add a small `ports/retinue-agent` *(planned target)* <!-- doc-audit: planned-path --> package to the Retinue repository when the
 lane starts. It owns:
 
 - projection adapters for devices, interfaces, peers, announces, routes,
@@ -611,14 +611,14 @@ one should not lose:
 - `ports/graphshell/src/identity_projection.rs` (new)
 - `ports/graphshell/src/native/personae_host.rs` (new)
 - `ports/graphshell/src/native/device_broker.rs` (new)
-- `ports/graphshell/src/bin/graphshell_device_host.rs` (new)
+- `ports/graphshell/src/bin/graphshell_device_host.rs` *(planned target)* <!-- doc-audit: planned-path --> (new)
 - `ports/graphshell/src/bin/graphshell_native_host.rs` (new relay)
-- `ports/graphshell/install-device-host-windows.ps1` (new)
+- `ports/graphshell/install-device-host-windows.ps1` *(planned target)* <!-- doc-audit: planned-path --> (new)
 - `ports/graphshell/src/session_loop.rs`
-- `crates/persona/personae/src/agent.rs`
-- `crates/persona/personae/src/signing.rs` (new only if the approval seam is
+- `crates/dramatis/personae/src/agent.rs`
+- `crates/dramatis/personae/src/signing.rs` (new only if the approval seam is
   independently useful outside Graphshell)
-- current `crates/system/session-runtime/src/wallet_store.rs` and
+- current `crates/system/session-runtime/src/wallet_store.rs` *(historical citation)* <!-- doc-audit: historical-path --> and
   `wallet_grant.rs` carry sources, through a narrow read/intent adapter
 
 Move the resident Personae host into native Graphshell and add a plain
@@ -763,7 +763,7 @@ interim task was restored with the same fingerprint. The known laptop was
 offline, so remote login remains open. The Graphshell logon task was not
 installed or used to retire the interim task because a real sign-out or reboot
 receipt is still required. See the
-[H4f resident device-host receipt](../../../ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md).
+[H4f resident device-host receipt](../../../ports/graphshell/docs/2026-07-28_h4f_resident_device_host_receipt.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 
 **H4g receipt (2026-07-28):** the final mixed-scene done-condition is now
 closed. Active delegated-device cards advertise one typed, native-only
@@ -1368,11 +1368,11 @@ See the
 
 **Retinue repository files:**
 
-- `ports/retinue-agent/Cargo.toml` (new)
-- `ports/retinue-agent/src/main.rs` (new)
-- `ports/retinue-agent/src/endpoint.rs` (new)
-- `ports/retinue-agent/src/projection.rs` (new)
-- `ports/retinue-agent/src/intents.rs` (new)
+- `ports/retinue-agent/Cargo.toml` *(planned target)* <!-- doc-audit: planned-path --> (new)
+- `ports/retinue-agent/src/main.rs` *(planned target)* <!-- doc-audit: planned-path --> (new)
+- `ports/retinue-agent/src/endpoint.rs` *(planned target)* <!-- doc-audit: planned-path --> (new)
+- `ports/retinue-agent/src/projection.rs` *(planned target)* <!-- doc-audit: planned-path --> (new)
+- `ports/retinue-agent/src/intents.rs` *(planned target)* <!-- doc-audit: planned-path --> (new)
 
 Start as a local stdio endpoint. Project:
 

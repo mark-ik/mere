@@ -28,7 +28,7 @@ The pieces exist; what is missing is **placement, rendering, and the unifying
 rule surface**.
 
 - **The kernel `Field` truth primitive** —
-  [`graph-kernel/.../field.rs`](../../../crates/graph/graph-kernel/src/graph/field.rs):
+   [`graph-kernel/.../field.rs`](../../../crates/graph/graph-kernel/src/graph/field.rs) *(historical citation)* <!-- doc-audit: historical-link -->:
   `Field { id: FieldId, name, definition: FieldDefinition, extent: FieldExtent,
   lifecycle }`. `FieldDefinition = Scalar(ScalarField) | Vector(VectorField)`.
   `FieldExtent = Global | Region{min_x,min_y,max_x,max_y} | AttachedToNode(Uuid)`
@@ -41,11 +41,11 @@ rule surface**.
   (`add_field`, `add_coupling`, `retire_field`, `field(id)`, `fields()`).
 - **Forces** — a `Field` does nothing alone; a `Coupling` (field → `NodeSelector`
   → `CouplingResponse` → strength) is resolved by gyre
-  [`CouplingForce::from_coupling`](../../../crates/orrery/gyre/src/coupling_force.rs)
+   [`CouplingForce::from_coupling`](../../../crates/orrery/gyre/src/coupling_force.rs) *(historical citation)* <!-- doc-audit: historical-link -->
   into a rapier force the layout tick runs. So "forces inside the region" = a
   coupling whose selector is "nodes in the field's extent".
 - **The rhai authoring path already exists** — aether
-  [`FieldProjection`](../../../crates/orrery/aether/src/projection.rs) + its rhai
+   [`FieldProjection`](../../../crates/orrery/aether/src/projection.rs) *(historical citation)* <!-- doc-audit: historical-link --> + its rhai
   bindings (`rhai_bindings.rs`: `gaussian`, `couple_attract`, …), committed to the
   graph via `FieldProjection::commit_to_graph`. **This is the seam the region's
   rule script extends**: today it is registry-id / global authoring; a field

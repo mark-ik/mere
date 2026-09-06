@@ -148,9 +148,9 @@ a flat buffer" is not greenfield work. The mere-side Rust transport is now lande
 meerkat enables netrender's `serde` feature, wraps `ContentUpdate` in a postcard
 byte envelope, dedups Scene font/image bytes by id across frames, and selects the
 transfer stream for `wasm32` builds
-([transfer.rs](../crates/meerkat/src/content/transfer.rs),
-[actor.rs](../crates/meerkat/src/content/actor.rs),
-[constellation/mod.rs](../crates/meerkat/src/constellation/mod.rs)). The remaining
+([transfer.rs](../crates/meerkat/src/content/transfer.rs) *(historical citation)* <!-- doc-audit: historical-link -->,
+[actor.rs](../crates/meerkat/src/content/actor.rs) *(historical citation)* <!-- doc-audit: historical-link -->,
+[constellation/mod.rs](../crates/meerkat/src/constellation/mod.rs) *(historical citation)* <!-- doc-audit: historical-link -->). The remaining
 web gap is the real browser Worker backend around that envelope.
 
 Measured on representative page bands (release, opt-level 3; the `serialize_cost`

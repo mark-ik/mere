@@ -6,7 +6,7 @@ interaction loop end to end. It states the pipeline once and assigns each stage 
 feature plans are non-overlapping layers it cross-refs. Written to stop the plan-cluster drift
 (six docs circling the orrery-as-interactive-document with overlapping claims), verified against
 the tree by a five-agent consolidation pass (2026-06-18).
-**Code**: `crates/meerkat/` (fetch, content, render, input, window_view), `crates/orrery/`
+**Code**: `crates/meerkat/` *(historical citation)* <!-- doc-audit: historical-path --> (fetch, content, render, input, window_view), `crates/orrery/` *(historical citation)* <!-- doc-audit: historical-path -->
 (orrery + gyre + arrangements), `crates/inker/` (engines), `crates/graph/` (kernel + linked-data).
 
 This doc is the **spine**; the [composition spine](2026-05-21_mere_composition_spine.md) stays
@@ -30,7 +30,7 @@ presentation and input seams; the layers below own closing that gap.
 
 In scope now (the model is stated over these):
 
-- **smolweb / gemtext**: mature. The nematic engine (15 engines, `crates/inker/engines/nematic`),
+- **smolweb / gemtext**: mature. The nematic engine (15 engines, `crates/inker/engines/nematic` *(historical citation)* <!-- doc-audit: historical-path -->),
   fetched + routed + rendered through the document-canvas lane.
 - **djot**: wired. `DjotKnotEngine` registered in `nematic::engines()` (lib.rs:98), routed by
   `text/x-knot` (routing.rs:343); the default knot grammar (jotdown).
@@ -52,7 +52,7 @@ this spine treats genet / scrying only as the embedded-frame compositing case.
 
 ### 1. Fetch (unified, no owner needed)
 
-One off-thread fetch actor (`crates/meerkat/src/fetch.rs`), scheme-routed (http(s) → netfetcher
+One off-thread fetch actor (`crates/meerkat/src/fetch.rs` *(historical citation)* <!-- doc-audit: historical-path -->), scheme-routed (http(s) → netfetcher
 WHATWG Fetch; gemini / gopher / finger / spartan / nex / guppy / titan → errand), folding every
 result into one `Fetched { content_type, body }`. Favicons + subresources ride the same actor.
 Already unified; documented here as the entry contract, no plan needed.
@@ -86,7 +86,7 @@ becomes a real genet subtree under the camera) is owned by unified-document-host
 ### 4. Arrange (the orrery's strongest seam)
 
 The orrery owns a backend-free `LayoutView` read-model fed each frame from a swappable physics
-source (`Physics::inline` or an off-thread armillary actor). The `crates/orrery/arrangements`
+source (`Physics::inline` or an off-thread armillary actor). The `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path -->
 registry (phyllotaxis / radial / l-system / penrose / grid) overlays host-computed positions;
 field-region couplings add localized force wells. The orrery and the tiled workbench are two
 projections of one forme arrangement.

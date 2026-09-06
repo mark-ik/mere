@@ -445,12 +445,12 @@ to a follow-up pass; not done in this brief):
 - **`design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`**
   — §5 protocol-mod framing reinterpreted through the new tier and
   hosting model.
-- **`design_docs/moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md`**
+ - **`design_docs/moothold_docs/implementation_strategy/2026-05-05_irc_mod_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->**
   — Pattern A reframed as "thin client routing"; Pattern B reframed as
   "outbound bridge."
-- **Crate READMEs** — `crates/meerkat`, `crates/moot/moothold`,
-  `crates/moot/mooting`, `crates/persona/identity`, `crates/murm/transport`,
-  `crates/murm/murm`, `crates/murm/murmuring` — touch up *coalition* and
+ - **Crate READMEs** — `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/moot/moothold`,
+   `crates/moot/mooting`, `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/murm/transport`,
+   `crates/murm/murm`, `crates/murm/murmuring` *(historical citation)* <!-- doc-audit: historical-path --> — touch up *coalition* and
   *moothold* references and the moot-as-graph-view framing.
 - **Memory** (`project_naming_state.md`, `memory/MEMORY.md` index) —
   update lexicon entries to match.

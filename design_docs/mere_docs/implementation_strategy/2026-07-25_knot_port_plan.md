@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 **Date:** 2026-07-25
 **Status:** implementation complete locally 2026-07-27. K0 through K7 are
@@ -37,7 +37,7 @@ milestones.
 
 ## 1. Ruling
 
-**Knot is a Mere port at `ports/knot`, beside `ports/graphshell`.** It ships a
+**Knot is a Mere port at `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->, beside `ports/graphshell`.** It ships a
 host plus a `knot_endpoint` binary, the shape Turnstone and Isometry already
 use and G4 already proved.
 
@@ -164,7 +164,7 @@ same-document text merge remains a Knot-owned product decision; the log now
 has an explicit, causal resolution operation instead of a hidden
 whole-document tiebreak.
 
-- **K0. Port scaffold. Complete locally 2026-07-27.** `ports/knot` is a
+- **K0. Port scaffold. Complete locally 2026-07-27.** `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> is a
   workspace member and `knot_endpoint` discloses a fixed fixture through the
   resumable stdio carrier. `g4_sessions` mounted it beside Turnstone and
   Isometry: four sessions from three endpoint processes. The committed receipt

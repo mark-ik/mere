@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/graphshell_docs/research/2026-04-11_linked_data_over_middlenet_relevance_note.md`
+> - Original path: `design_docs/graphshell_docs/research/2026-04-11_linked_data_over_middlenet_relevance_note.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `401e2fcc`
 >
 > None of it was ever built as written. It is filed here as research, not as a

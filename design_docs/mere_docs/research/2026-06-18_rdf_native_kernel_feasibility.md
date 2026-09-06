@@ -55,7 +55,7 @@ Cross-refs:
 - **The refactor is contained behind the kernel's stable public API.** Consumers
   (orrery, meerkat) use the `Graph` public methods (`out_neighbors`, `get_node`,
   `assert_relation`, `cull_aabb`, `positions`); direct petgraph coupling *outside*
-  graph-kernel is ~5 occurrences, all in `crates/orrery/arrangements` adapters.
+graph-kernel is ~5 occurrences, all in `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> adapters.
   So changing the kernel's storage behind those methods is graph-kernel-internal,
   not a workspace rewrite. (grep: `.inner`/`petgraph::`/`NodeIndex`/`StableGraph`
   = 5 hits across 3 adapter files in orrery.)
@@ -146,7 +146,7 @@ direction). Either way the spike is small and decision-bounded.
   outside graph-kernel, all arrangement adapters); `rdf-canon` immature (defer
   canon/signing); reifier-node form for RDF 1.2 metadata. Spike plan scoped; the
   hot-path perf benchmark is the decision gate. No code written.
-- **2026-06-18 (resolved)** — benchmark ran (`crates/probes/rdf-kernel-bench/`).
+- **2026-06-18 (resolved)** — benchmark ran (`crates/probes/rdf-kernel-bench/` *(historical citation)* <!-- doc-audit: historical-path -->).
   Reframed by Mark: petgraph (runtime index) and oxrdf (content model) *compose*,
   so the hot path is petgraph in every design and there was no speed race. The
   real axis is the cost of *holding* RDF as live truth: ≈11x memory, ≈19x load,

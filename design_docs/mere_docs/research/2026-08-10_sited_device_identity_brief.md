@@ -80,7 +80,7 @@ Both halves check out. Two findings reshape them.
 
 ## Finding 1: signalman's identity model is the thing to replace
 
-Verified in retinue, not assumed. `postilion::StationConfig` (`crates/postilion/src/lib.rs`)
+Verified in retinue, not assumed. `postilion::StationConfig` (`crates/postilion/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path -->)
 says it outright at line 108: **"Where the operator's private identity lives.
 The file is the account."** `load_identity()` reads a 64-byte seed from
 `station.id` (or `park-<name>.id`), or mints one with `getrandom::fill` and

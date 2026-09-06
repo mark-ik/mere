@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/research/2026-03-28_libp2p_nostr_synergy_for_verse.md`
+> - Original path: `design_docs/verse_docs/research/2026-03-28_libp2p_nostr_synergy_for_verse.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `f36fc49b`
 >
 > None of it was ever built. It is filed here as research, not as a plan and
@@ -31,12 +31,12 @@
 
 **Related**:
 
-- [`../technical_architecture/VERSE_AS_NETWORK.md`](../technical_architecture/VERSE_AS_NETWORK.md) — Verse network position; bilateral/community boundary
-- [`../technical_architecture/2026-02-23_verse_tier2_architecture.md`](../technical_architecture/2026-02-23_verse_tier2_architecture.md) — Tier 2 dual-transport, VerseBlob, community primitives, Nostr signaling (§8)
-- [`../technical_architecture/2026-03-05_verse_nostr_dvm_integration.md`](../technical_architecture/2026-03-05_verse_nostr_dvm_integration.md) — NIP-90 DVM compute layer, Verse-specific NIP-72 tags
-- [`../../graphshell_docs/implementation_strategy/system/2026-03-05_network_architecture.md`](../../graphshell_docs/implementation_strategy/system/2026-03-05_network_architecture.md) — Three-context + two-fabric model; NIP-72/NIP-29 Verse integration (§4)
-- [`../../nostr_docs/technical_architecture/nostr_relay_spec.md`](../../nostr_docs/technical_architecture/nostr_relay_spec.md) — Embedded relay Community mode
-- [`../technical_architecture/2026-03-05_verse_economic_model.md`](../technical_architecture/2026-03-05_verse_economic_model.md) — Three-track economic model (sats/FIL/reputation)
+- [`../technical_architecture/VERSE_AS_NETWORK.md`](../technical_architecture/VERSE_AS_NETWORK.md) *(historical citation)* <!-- doc-audit: historical-link --> — Verse network position; bilateral/community boundary
+- [`../technical_architecture/2026-02-23_verse_tier2_architecture.md`](../technical_architecture/2026-02-23_verse_tier2_architecture.md) *(historical citation)* <!-- doc-audit: historical-link --> — Tier 2 dual-transport, VerseBlob, community primitives, Nostr signaling (§8)
+- [`../technical_architecture/2026-03-05_verse_nostr_dvm_integration.md`](../technical_architecture/2026-03-05_verse_nostr_dvm_integration.md) *(historical citation)* <!-- doc-audit: historical-link --> — NIP-90 DVM compute layer, Verse-specific NIP-72 tags
+- [`../../graphshell_docs/implementation_strategy/system/2026-03-05_network_architecture.md`](../../graphshell_docs/implementation_strategy/system/2026-03-05_network_architecture.md) *(historical citation)* <!-- doc-audit: historical-link --> — Three-context + two-fabric model; NIP-72/NIP-29 Verse integration (§4)
+- [`../../nostr_docs/technical_architecture/nostr_relay_spec.md`](../../nostr_docs/technical_architecture/nostr_relay_spec.md) *(historical citation)* <!-- doc-audit: historical-link --> — Embedded relay Community mode
+- [`../technical_architecture/2026-03-05_verse_economic_model.md`](../technical_architecture/2026-03-05_verse_economic_model.md) *(historical citation)* <!-- doc-audit: historical-link --> — Three-track economic model (sats/FIL/reputation)
 
 ---
 

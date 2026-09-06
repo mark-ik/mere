@@ -9,7 +9,7 @@
 **Related**:
 
 - [`2026-05-10_cartography_layer_brief.md`](2026-05-10_cartography_layer_brief.md) — the projection/display layer this brief leans on for the "panes are projections" framing.
-- Phase 1 / 1B / 2 work landed in `crates/mere-host/src/` — see `bootstrap.rs`, `graph_registry.rs`, `pane_state.rs`, `tearout.rs`, `graph_switcher.rs`, and the `mere-frame` crate's `FrameLayout` + `GraphId`.
+- Phase 1 / 1B / 2 work landed in `crates/mere-host/src/` *(historical citation)* <!-- doc-audit: historical-path --> — see `bootstrap.rs`, `graph_registry.rs`, `pane_state.rs`, `tearout.rs`, `graph_switcher.rs`, and the `mere-frame` crate's `FrameLayout` + `GraphId`.
 
 ---
 
@@ -387,9 +387,9 @@ Decisions this brief commits to. Override in subsequent docs if reasoning change
 
 **Implies concrete follow-ups**, each its own brief or plan doc:
 
-- `GraphSessionManifest` + session-persistence implementation plan (§3, §5.1) — [drafted 2026-05-11](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md).
+- `GraphSessionManifest` + session-persistence implementation plan (§3, §5.1) — [drafted 2026-05-11](../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md).
 - `ViewIntent` sidecar + cartography wiring (§5.3, §10).
-- Action bus + capability gate catalogue (§5.8, §7) — action bus [drafted 2026-05-11](../implementation_strategy/2026-05-11_typed_action_bus_plan.md).
+- Action bus + capability gate catalogue (§5.8, §7) — action bus [drafted 2026-05-11](../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md).
 - Switcher-thumbnail implementation (§5.5) — depends on cartography strategies in `graph-layout`.
 - Persona model brief (§11.2).
 - Tear-out operations brief (§11.3) — [drafted 2026-05-11](2026-05-11_tearout_operations_brief.md).

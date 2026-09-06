@@ -50,7 +50,7 @@ mere's `Graph.inner` is no longer a bare `petgraph::StableGraph`; it is a
   add/remove through `connect` / `disconnect`. Weight mutation uses `node_mut` /
   `edge_mut`.
 - **Algorithms read through one seam.** chartulary grew a read-only
-  [`inner()`](../../../chartulary/src/graph.rs) accessor returning the underlying
+   [`inner()`](../../../chartulary/src/graph.rs) *(historical citation)* <!-- doc-audit: historical-link --> accessor returning the underlying
   `&StableGraph`, plus `contains_node` and `node_weights_mut`. mere's graph queries
   (shortest path, SCC, connectivity, structural iteration) run petgraph's own
   functions over `inner()`. Topology mutation cannot go through it (the borrow is

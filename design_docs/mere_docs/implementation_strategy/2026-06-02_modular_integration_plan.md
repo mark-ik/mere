@@ -4,8 +4,8 @@
 **Status**: Draft (for review). The unifying sequence + architecture spine for
 integrating all of Mere onto the single genet-as-host shell (`meerkat`). It does not replace the
 canonical docs it weaves: the [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md)
-(the model), the [genet-as-host flip plan](2026-06-01_genet_host_flip_plan.md)
-(the host migration), and the [adoption roadmap](2026-05-27_adoption_roadmap.md)
+(the model), the [genet-as-host flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_genet_host_flip_plan.md)
+(the host migration), and the [adoption roadmap](../../archive_docs/2026-06-09_completed_plans/2026-05-27_adoption_roadmap.md)
 (the R0–R5 wiring order). It sequences those three in-flight tracks into one build,
 fixes the architecture's root question, inventories the (large) already-built
 leverage surface, and schedules the cleanup.
@@ -64,7 +64,7 @@ the bottom realization substrate.
 ## 2. The host model (meerkat)
 
 meerkat is the one app shell. The render path is settled and the seam is **not** a
-renderer-registry trait (that was killed in the [2026-05-21 rescaffold](../technical_architecture/2026-05-21_app_architecture_rescaffold.md);
+renderer-registry trait (that was killed in the [2026-05-21 rescaffold](../../archive_docs/2026-06-09_pivot_superseded/2026-05-21_app_architecture_rescaffold.md);
 the README's `host-ports/` + `register-renderer/` directories are gone from disk,
 only an empty `register-renderer-types` stub survives). The seam is:
 
@@ -189,7 +189,7 @@ host-wired), `intel/embed` (Tier-2 embeddings, persists through eidetic),
    modules deleted (zero live consumers); workspace rewired. Builds + tests green.
    *(2026-06-10: superseded — `canvas-ir` and `graph-layout` were themselves
    deleted 2026-06-07; keep-worthy layouts recaptured into
-   `crates/orrery/arrangements`. See topology §8.)*
+    `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path -->. See topology §8.)*
 9. **register-\* latent + dual routing** — `register-viewer` (mime→viewer) duplicates
    `inker::routing` (engine-id); reconcile.
 10. **Pervasive doc staleness** — README lists cut crates; many docs predate the
@@ -282,7 +282,7 @@ critical path threads the flip plan (P1–P5) and the adoption roadmap (R0–R5)
   **Detailed elaboration: [scrying tile plan](2026-06-10_scrying_tile_plan.md)**
   (UI-thread `ScryingHost` beside the constellation; X1 Windows-first →
   X2 input/nav → X3 lifecycle + per-node pin → X4 macOS/Linux).
-- **S7 — Cutover + cleanup (flip P5 + R4).** Retire `crates/mere/app` and the
+- **S7 — Cutover + cleanup (flip P5 + R4).** Retire `crates/mere/app` *(historical citation)* <!-- doc-audit: historical-path --> and the
   xilem/masonry fork deps once meerkat reaches parity; then §7 cleanup.
 - **Later (own milestones):** federation proper (moot machinery), intel workers via
   the SessionServiceRunner, profiles/advanced tear-out (branch/fork), the field-system
@@ -331,7 +331,7 @@ Schedule these so they stop polluting the topology and misleading readers:
   workspace. Targeted tests green (canvas-ir 57, graph-layout 14, platen 130,
   cartography 44); meerkat builds. *(2026-06-10: this was an intermediate
   state — `canvas-ir` + `graph-layout` were deleted 2026-06-07 and the
-  keep-worthy layouts recaptured into `crates/orrery/arrangements`; topology
+   keep-worthy layouts recaptured into `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path -->; topology
   §8 is the receipt.)*
 - **Relocate `kernel` + `cartography` + `graph-layout` out of `crates/graphshell/`**
   (R4, pure move) — kernel-under-shell is upside down.

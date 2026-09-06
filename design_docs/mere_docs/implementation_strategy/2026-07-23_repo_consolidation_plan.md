@@ -24,7 +24,7 @@ sequence, and receipts remain in force.
 the [projection proofs plan](2026-07-21_projection_proofs_plan.md), the
 [Murm peer-runtime and Moot-domain plan](2026-07-12_murm_peer_runtime_and_moot_domain_plan.md)
 (promotion rows withdrawn by this plan), and the
-[mere/turnstone boundary pass plan](2026-07-09_mere_turnstone_boundary_pass_plan.md).
+[mere/turnstone boundary pass plan](2026-07-09_mere_turnstone_boundary_pass_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 
 > **Boundary correction, 2026-09-02:** the
 > [platform boundary and repository topology plan](2026-09-02_platform_boundary_and_repository_topology_plan.md)
@@ -95,7 +95,7 @@ Notes:
   settles the mere-eidetic naming: primitives and adapters live in one folder,
   and the orphaned bare `eidetic` crates.io name is documented where it is
   reserved.
-- `crates/persona/identity` (the dead duplicate) is deleted in the same change
+- `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path --> (the dead duplicate) is deleted in the same change
   that lands personae; the workspace `identity` alias becomes a workspace path.
 - The graphshell five keep their crate names and land under
   `crates/graphshell/`; the facade is Mere's reference client, pelt-shaped.
@@ -110,7 +110,7 @@ Notes:
 | cambium | `cambium`, `cambium-nematic`, `cambium-winit`, `meristem`, `sprigging` | turnstone; genet's `genet_web_smoke` example path dep becomes a workspace reference |
 | netfetcher | `netfetcher` | genet (genet-documents, genet-wpt become workspace refs), mere (`crates/system/fetch`) |
 
-tinct already lives in genet (`components/tinct`); woodshed and hocket repoint
+tinct already lives in genet (`components/tinct` *(historical citation)* <!-- doc-audit: historical-path -->); woodshed and hocket repoint
 from the `mark-ik/tinct` mirror to genet.git and the mirror repo retires with
 a tombstone.
 
@@ -144,7 +144,7 @@ the merged workspace.
 
 ### Withdrawn
 
-The murm/moot promotion to `repos/murm` and `repos/moot` is withdrawn. They
+The murm/moot promotion to `repos/murm` *(historical citation)* <!-- doc-audit: historical-path --> and `repos/moot` *(historical citation)* <!-- doc-audit: historical-path --> is withdrawn. They
 stay in mere; isometry keeps pulling them from mere.git. The audio-primitives
 standalone promotion is deferred: hocket repoints to woodshed.git, and a
 standalone repo waits for a third consumer.
@@ -218,7 +218,7 @@ mere check green on the new pins, and the old repos are read-only.
 Ordered so mere is green after every sub-step. Coordinate with in-flight
 sibling sessions before C3b; the eidetic step touches every product.
 
-- **C3a personae + armillary.** Delete `crates/persona/identity`; the
+- **C3a personae + armillary.** Delete `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path -->; the
   `identity` alias becomes a workspace path. Repoint woodshed, hocket,
   isometry.
 - **C3b eidetic four** into `crates/eidetic/`. Repoint turnstone, isometry,
@@ -280,8 +280,8 @@ primary repos build from clean clones.
   All are eliminated by C1 through C4.
 - conatus reaches mere as crates.io pins today (`numen 0.1`, `quint 0.0.2`,
   `seiche 0.0.3`); it has no consumer outside mere.
-- The `mark-ik/tinct` mirror duplicates `genet/components/tinct`.
-- `crates/persona/identity` is a dead duplicate; the live alias already
+- The `mark-ik/tinct` mirror duplicates `genet/components/tinct` *(historical citation)* <!-- doc-audit: historical-path -->.
+- `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path --> is a dead duplicate; the live alias already
   targets personae by path.
 - genet's `genet_web_smoke` example reaches cambium by sibling path,
   a dev-only cycle that C2 removes.
@@ -360,12 +360,12 @@ primary repos build from clean clones.
   matching how it already consumed misfin. Finding: the three crates were
   copied rather than subtree-split — `git subtree split` over genet's history
   did not finish in ten minutes, so their 2026-07-10 to 2026-07-23 history
-  stays in genet under `components/errand/protocols/`, recorded in the
+  stays in genet under `components/errand/protocols/` *(historical citation)* <!-- doc-audit: historical-path -->, recorded in the
   smolweb README. **A split out of a large repo is not a viable history move;
   plan for copy-plus-pointer.**
 - **C3 landed** (mere `6a37de6b`, pushed). All nine families are mere
   workspace members with history preserved; the dead
-  `crates/persona/identity` duplicate is deleted. `cargo check --workspace`
+  `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path --> duplicate is deleted. `cargo check --workspace`
   is green except `document-host`, which is red on servitor's in-flight
   capability model from another session's unpushed commit — a break that
   predates the move, since mere already built against the local servitor
@@ -455,7 +455,7 @@ primary repos build from clean clones.
   in its destination (the eidetic four, scenograph, vates, sibylla, personae,
   cambium, and tucket all confirmed — tucket's `design_docs` were lifted to
   retinue's top-level `design_docs/` by the C4 merge, not kept under
-  `crates/tucket/`).
+  `crates/tucket/` *(historical citation)* <!-- doc-audit: historical-path -->).
   - **Split by blast radius.** Five archived repos need no repoint at all and
     are safe to delete immediately: `eidetic` and `servitor` (their crates
     carry no `repository`), and `tulle`/`sennet`/`tucket` (their crates already

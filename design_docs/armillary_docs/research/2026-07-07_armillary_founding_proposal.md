@@ -43,7 +43,7 @@ deps. It already earns its place as a shared spine; it was simply living inside
 the mere workspace. Two forces pull it out now:
 
 - **vates needs it.** The vates founding proposal
-  (`repos/vates/design_docs/2026-07-07_vates_founding_proposal.md`, sections 5 and
+(`repos/vates/design_docs/2026-07-07_vates_founding_proposal.md` *(historical citation)* <!-- doc-audit: historical-path -->, sections 5 and
   8) flagged armillary as vates's *one* mere coupling: vates's streaming
   inference actor (roadmap P2) rides this harness. That proposal recommended
   reimplementing a thin thread-actor primitive inside vates specifically because

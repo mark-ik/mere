@@ -19,7 +19,7 @@ entry point), the Distillery trainer, marketplace/governance.
 
 ### P0 — The seam crate
 
-`crates/intel/infer` (sibling of `embed`, same shape):
+`crates/intel/infer` *(historical citation)* <!-- doc-audit: historical-path --> (sibling of `embed`, same shape):
 
 - `InferenceProvider`: `Send + Sync`; `capability()` descriptor;
   `generate_streaming(&request, on_token)` as the primary call (tokens
@@ -131,7 +131,7 @@ size rather than binding one unqualified number.
 ## Progress
 
 - 2026-07-05 — plan written; P0 implementation same session.
-- 2026-07-05 — P0 landed. `crates/intel/infer` in the workspace:
+- 2026-07-05 — P0 landed. `crates/intel/infer` *(historical citation)* <!-- doc-audit: historical-path --> in the workspace:
   `provider.rs` (`InferenceProvider` streaming-primary trait,
   `ModelCapability` + `CapabilityQuery` matching, `InferError`), `canned.rs`
   (`CannedProvider`: exact-match + echo, word-fragment streaming honouring
@@ -254,7 +254,7 @@ size rather than binding one unqualified number.
   inference actor now runs inside meerkat, wired the same shape as
   fetch/find/sync: spawned in `shell_new` with a winit-proxy wake, handle
   in `Content`, receiver in `KernelInbox`, drained in `on_user_event`.
-  `crates/meerkat/src/infer_host.rs` builds the provider on the actor
+  `crates/meerkat/src/infer_host.rs` *(historical citation)* <!-- doc-audit: historical-path --> builds the provider on the actor
   thread — a real `DecoderProvider<Wgpu>` (TinyLlama) under the new
   `local-inference` feature when `MERE_TINYLLAMA_DIR` is set, else infer's
   `CannedProvider` stub, so the shell runs with or without a model.
@@ -274,7 +274,7 @@ size rather than binding one unqualified number.
   (app ran + rendered, infer actor started) — the practical D1 check.
   The `>ask` shell_eval unit test is written (mirrors the recall/scene
   tests) and now passes: the lib test target was blocked from compiling by
-  an unrelated stale test — `crates/meerkat/src/ingest.rs`'s `#[cfg(test)]`
+  an unrelated stale test — `crates/meerkat/src/ingest.rs` *(historical citation)* <!-- doc-audit: historical-path -->'s `#[cfg(test)]`
   asserted `(String, String)` property tuples against the committed
   `NodeProperty` struct refactor — fixed here (match `predicate`/`value`
   fields; `page_extract_enriches…` + `ask_records…` both green). Three

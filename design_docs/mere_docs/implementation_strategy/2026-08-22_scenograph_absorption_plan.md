@@ -19,7 +19,7 @@ board, and geographic solvers here").
 
 Mere carries two placement engines with overlapping catalogs.
 
-| | `crates/canvas/arrangements` | `crates/scenograph/scenomise` |
+| | `crates/canvas/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/scenograph/scenomise` *(historical citation)* <!-- doc-audit: historical-path --> |
 |---|---|---|
 | lines | 6,785 (src) | ~600 (`solve.rs` + `relax.rs`) |
 | deps | `cartography` + `kernel` — bound to graph truth | `sceno` only — portable |
@@ -385,14 +385,14 @@ nothing left to work around once `solve` returns positions.
 
 ### S6 — delete arrangements
 
-- Remove `crates/canvas/arrangements` and its workspace member entry.
+- Remove `crates/canvas/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> and its workspace member entry.
 - `CanvasSceneInput` / `CanvasNode` / `CanvasEdge` / `CanvasViewport` move
   to `cartography` — they are graph-shaped, not portable.
 
 **Done when:** `cargo check --workspace` green with no `arrangements`
 reference remaining; `cargo test --workspace` green.
 
-**Landed.** `crates/canvas/arrangements` is deleted (6,785 lines), along with
+**Landed.** `crates/canvas/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> is deleted (6,785 lines), along with
 its workspace member entry, its workspace dependency, and `mere-canvas`'s
 dependency on it.
 
@@ -460,7 +460,7 @@ not compile reports no failures, which reads exactly like passing.
 `timeline_uses_one_proportional_axis_with_collision_free_strips`, which are
 behavioural checks over the arrangement output rather than compile checks.
 
-`crates/repo-graph/src/arrangement.rs` is new and holds the two things the
+`crates/repo-graph/src/arrangement.rs` *(historical citation)* <!-- doc-audit: historical-path --> is new and holds the two things the
 registry used to supply:
 
 - **The catalog.** `LayoutRegistry::<String>::default()` provided both
@@ -503,7 +503,7 @@ should be bumped deliberately rather than drifting.
 - **seiche** keeps the live force physics. `scenomise::relax` and seiche are
   not merged by this plan; whether the relaxation pass and the force solver
   should converge is a separate question worth asking later.
-- **cambium's `graph_canvas`** (`repos/genet/components/cambium`, 2,167
+- **cambium's `graph_canvas`** (`repos/genet/components/cambium` *(historical citation)* <!-- doc-audit: historical-path -->, 2,167
   lines) and sprigging's `GraphCanvas` leaf are a third node-link renderer
   at swatch tier, with their own pan/zoom projection. Mere does not consume
   it — only `AnyView`, the caret types, and persona-picker widgets —

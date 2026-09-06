@@ -5,7 +5,7 @@
 
 > **Reconcile note (2026-07-03 archive pass):** the code moved past the status line —
 > `session_service_runner.rs` now also ships an `InMemoryRunner` (`impl SessionServiceRunner`)
-> and the misfin server (`crates/murm/misfin/src/server.rs`) runs as a
+> and the misfin server (`crates/murm/misfin/src/server.rs` *(historical citation)* <!-- doc-audit: historical-path -->) runs as a
 > `SessionServiceRunner` worker. v0b is at least partially real; the remaining question is
 > which of the §-listed worker kinds (fetcher pool, embedder, indexer, …) still lack runners.
 > File paths below are 2026-05-14-era; verify before use.
@@ -14,7 +14,7 @@
 **Related**:
 
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.7 — the framing brief.
-- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `WorkerKind` enum (currently `None`-only); `GraphSessionManifest.active_workers: Vec<WorkerKind>` is already in place.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) *(historical citation)* <!-- doc-audit: historical-link --> — `WorkerKind` enum (currently `None`-only); `GraphSessionManifest.active_workers: Vec<WorkerKind>` is already in place.
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.9 — single-process logical daemon framing. v0 runs in-process; v1+ may relocate to a separate service. The trait is designed so the relocation doesn't rewrite session semantics.
 
 ---

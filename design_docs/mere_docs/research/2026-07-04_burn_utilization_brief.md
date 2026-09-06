@@ -18,18 +18,18 @@ tensor-ready while burn itself stays behind a handful of seams.
 
 ## Current footprint (code-verified 2026-07-04)
 
-- **`crates/intel/embed`**: `EmbeddingProvider` trait with the `hashed` backend
+- `crates/intel/embed` *(historical citation)* <!-- doc-audit: historical-path -->: `EmbeddingProvider` trait with the `hashed` backend
   shipped and a full BERT implementation behind the `bert` feature
   (attention / encoder / feed-forward / safetensors loader / validation, plus
   `tests/bert_full_pipeline.rs`). Backend: burn 0.21, ndarray, CPU. No wgpu
   feature declared.
-- **`crates/eidetic/eidetic-search`**: consumes embed as the vector half of
+- `crates/eidetic/eidetic-search` *(historical citation)* <!-- doc-audit: historical-path -->: consumes embed as the vector half of
   fused recall; depends on burn only to name the backend type.
-- **`crates/orrery/aether`**: `lower_burn.rs` walks the field-algebra AST and
+- `crates/orrery/aether` *(historical citation)* <!-- doc-audit: historical-path -->: `lower_burn.rs` walks the field-algebra AST and
   emits fused tensor programs, with solid scalar/vector operator coverage
   including analytic gradients. Default backend ndarray; `field-burn-wgpu`
   is declared in the manifest but nothing wires or measures it.
-- **`crates/orrery/gyre`**: burn-free by design (manifest comment: no
+- `crates/orrery/gyre` *(historical citation)* <!-- doc-audit: historical-path -->: burn-free by design (manifest comment: no
   rhai/burn pulled into the simulator). Aether is the burn boundary for
   anything physics-shaped.
 - burn 0.21 was latest stable at the 2026-07-04 dependency audit.
@@ -93,7 +93,7 @@ on burn-wgpu, native and wasm, and the harness brief's two open measurements
 (wasm model-size ceiling; burn-wgpu vs native-runtime competitiveness) have
 recorded answers.
 
-**Status 2026-07-05 (end of day)**: the lane is real. `crates/intel/infer`
+**Status 2026-07-05 (end of day)**: the lane is real. `crates/intel/infer` *(historical citation)* <!-- doc-audit: historical-path -->
 carries the seam, the actor (with mid-stream cancellation), and the own
 llama-family decoder body — validated on the actual TinyLlama-1.1B
 checkpoint ("The capital of France is" → "Paris, …") at **9.95 tok/s on

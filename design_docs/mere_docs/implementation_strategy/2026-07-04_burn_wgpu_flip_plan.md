@@ -2,7 +2,7 @@
 
 **Date**: 2026-07-04
 **Status**: P0-P3 landed and measured; P4 aether wasm receipt green (2026-07-05). embed's wasm receipt is its own follow-on slice (getrandom-0.3-via-ahash + the tokenizers/onig C dependency); see Findings.
-**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 1 + decision D1; this plan is its first spin-out), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (D2, the wasm ceiling, starts after this), `crates/intel/embed`, `crates/orrery/aether`.
+**Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md) (Lane 1 + decision D1; this plan is its first spin-out), [local_models_harness_brief](../research/2026-06-24_local_models_harness_brief.md) (D2, the wasm ceiling, starts after this), `crates/intel/embed` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/orrery/aether` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 ## Scope
 

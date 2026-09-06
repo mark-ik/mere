@@ -6,14 +6,14 @@ waveforms, graph canvases) live as first-class serval elements without a second
 UI engine. Sits beside the reactive backend from
 [2026-05-27_serval_as_host_xilem_serval_plan.md](./2026-05-27_serval_as_host_xilem_serval_plan.md)
 and rides the paint seams from
-[2026-05-17_paintlist_polyglot_renderer.md](./2026-05-17_paintlist_polyglot_renderer.md).
+[2026-05-17_paintlist_polyglot_renderer.md](../../../../genet/docs/2026-05-17_paintlist_polyglot_renderer.md).
 Working crate name **`chisel`** (needs a crates.io check before reservation).
 
 Code samples are **illustrative** unless marked implementation-ready.
 
 **Implementation status (2026-07-07):**
 
-- `components/chisel` scaffolded and building (workspace member; deps
+- `components/chisel` *(historical citation)* <!-- doc-audit: historical-path --> scaffolded and building (workspace member; deps
   `paint_list_api` + `accesskit`). Ships the `Leaf` trait, `PaintCx` (Path A),
   `LeafRegistry<K>`, and a `Swatch` leaf; a unit test drives measure → emit one
   `DrawRect` → `paint_dirty` clears (green).
@@ -317,7 +317,7 @@ xilem-serval                      reactive backend (stays a serval component)
 
 Decisions:
 
-- **chisel starts as a serval component** (`components/chisel`), engine-neutral
+- **chisel starts as a serval component** (`components/chisel` *(historical citation)* <!-- doc-audit: historical-path -->), engine-neutral
   against the seam crates. It is a *sibling* of serval-layout (both target the
   seams), not a downstream of the engine.
 - **Spinning chisel to its own repo is gated on the seam crates becoming
@@ -432,8 +432,8 @@ sheds the bespoke host-composite branch.
 - [2026-05-27_serval_as_host_xilem_serval_plan.md](./2026-05-27_serval_as_host_xilem_serval_plan.md)
   — the reactive backend chisel leaves are authored through. chisel is the leaf
   layer that plan's views wrap.
-- [2026-05-17_paintlist_polyglot_renderer.md](./2026-05-17_paintlist_polyglot_renderer.md)
+- [2026-05-17_paintlist_polyglot_renderer.md](../../../../genet/docs/2026-05-17_paintlist_polyglot_renderer.md)
   — the paint seam. Path A emits its common `PaintCmd`s; Path B uses its
   `DrawExternalTexture` lowering. chisel adds no new `PaintCmd` variant.
-- [2026-05-16_layout_dom_api_design.md](./2026-05-16_layout_dom_api_design.md)
+- [2026-05-16_layout_dom_api_design.md](../../../../genet/docs/2026-05-16_layout_dom_api_design.md)
   — the DOM seam a leaf attaches to as a replaced element.

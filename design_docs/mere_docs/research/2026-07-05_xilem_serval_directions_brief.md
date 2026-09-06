@@ -9,7 +9,7 @@ absorb the other three (they go beyond what the platform standardizes).
 Context: xilem_serval is the third `xilem_core` backend (beside Masonry and
 `xilem_web`), diffing typed view trees into genet's `ScriptedDom`; see
 `genet/docs/2026-05-27_genet_as_host_xilem_serval_plan.md` and the crate
-docs at `genet/components/xilem-serval/src/lib.rs`.
+docs at `genet/components/xilem-serval/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 What makes these compound: xilem_serval is a reactive layer that owns a
 real DOM inside an engine we also own. Each idea exploits that double

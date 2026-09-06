@@ -4,7 +4,7 @@
 **Status**: Snapshot after the B1–B7 supercrate naming pass + vestigial cleanup. **Latest:** §7 (2026-06-07) records the `graphshell/` supercrate dissolution into the `graph` / `orrery` / `shell` / `system` clusters; §8 (2026-06-07) records the `canvas-ir` + `graph-layout` review → `orrery/arrangements` + `gyre::barnes_hut`. §§1–5 predate the genet-as-host flip and are stale (see §7's staleness flag).
 **Companion to**: [`../research/2026-05-15_browser_taxonomy_translation_brief.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_browser_taxonomy_translation_brief.md) (taxonomy-translation framing), [`../implementation_strategy/2026-05-15_spatial_chrome_modular_adoption_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_modular_adoption_plan.md) (adoption sequence).
 
-Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
+Earlier doc-level snapshots (e.g. the topology table in `DOC_README.md`) predate this pass and still cite a `crates/workbench/` *(historical citation)* <!-- doc-audit: historical-path --> umbrella that the rename dissolved. This file is the current source of truth for the workspace shape; the index has been updated to point here.
 
 ---
 
@@ -90,10 +90,10 @@ crates/
     └── identity/                    — keypair + provider + persona manifest
 ```
 
-The Mere binary at `crates/mere/host/` is the only entry point; everything else is a library crate. Two crates sit outside the workspace `members` list and are reachable only as explicit path-deps:
+The Mere binary at `crates/mere/host/` *(historical citation)* <!-- doc-audit: historical-path --> is the only entry point; everything else is a library crate. Two crates sit outside the workspace `members` list and are reachable only as explicit path-deps:
 
 - `crates/probes/` — sketch crates that adapt to upstream skew, never workspace-pinned.
-- `crates/verso/masonry-renderer/` — the xilem-masonry adapter; its build matrix doesn't share the workspace pins yet.
+- `crates/verso/masonry-renderer/` *(historical citation)* <!-- doc-audit: historical-path --> — the xilem-masonry adapter; its build matrix doesn't share the workspace pins yet.
 
 ## 2. Browser anatomy — functional groups
 
@@ -103,7 +103,7 @@ Mainstream browsers (Firefox, Chromium) ship roughly twelve functional groups. M
 |---|---|---|---|
 | **Browser chrome / UI** | Title bar, menus, address bar, sidebar, settings | Toolbar + omnibar + command palette + authorities view-models (rendered via xilem-masonry once the panel renderer lands) | `graphshell/shell/domain/chrome`, `forme/uxtree` |
 | **Tab management** | Tab strip, tab switcher, session restore | **Replaced** by spatial graph canvas — nodes are tiles, edges are relations, tabs are not a primary concept; switcher = graph thumbnails | `graphshell/graph/{kernel,canvas,cartography,orrery}`, `forme/forme`, session-runtime's `switcher_thumbnail` |
-| **Web engine** | DOM/CSS/layout/JS engine | **Multi-tenant** — engines coexist via inker registry: `scrying.web` (system WebView), `nematic.*` (smolweb), `genet.web` (full web, external) | `inker/engines/{scrying-engine,nematic}`, `crates/verso/masonry-renderer` (excluded), genet (external) |
+| **Web engine** | DOM/CSS/layout/JS engine | **Multi-tenant** — engines coexist via inker registry: `scrying.web` (system WebView), `nematic.*` (smolweb), `genet.web` (full web, external) | `inker/engines/{scrying-engine,nematic}`, `crates/verso/masonry-renderer` *(historical citation)* <!-- doc-audit: historical-path --> (excluded), genet (external) |
 | **Rendering / compositor** | Display list → compositor scene → GPU | Renderer-registry contract; three composition modes (InScenePaint / EmbeddedFrame / Overlay). vello + wgpu under everything. | `graphshell/shell/system/registry/register-renderer{,-types}`, `verso/{verso-core,scrying-renderer}`, `platen/platen` |
 | **Process model** | Parent + content + GPU + network processes | **Single-process logical daemon** at v1; SessionServiceRunner reserves the seam for later split | `graphshell/shell/session-runtime::session_service_runner` |
 | **Networking** | HTTP, fetch, cookies, cache, TLS, DNS | Two fetchers + a peer transport; cookies/cache fold into engine profile bytes | `eidetic/{eidetic-https-fetcher,eidetic-iroh-fetcher}`, `murm/transport` |
@@ -136,7 +136,7 @@ Mainstream browsers (Firefox, Chromium) ship roughly twelve functional groups. M
 
 **Crates that exist but are not yet wired into the host:**
 
-- `orrery` (tier framework primitives; renderer chain consumes via `OrreryRenderer` in `mere/host`)
+- `orrery` (tier framework primitives; renderer chain consumes via `OrreryRenderer` in `mere/host` *(historical citation)* <!-- doc-audit: historical-path -->)
 - `node-lineage` (lineage records exist in `kernel`; lineage-view UI not yet wired)
 - `aether` (paint primitives — referenced indirectly through `graph-canvas`)
 
@@ -167,8 +167,8 @@ The follow-up commit (today) covered the type-level fallout: `MereHostApp` → `
 1. **Mod surface as a crate?** Currently spec'd against the action bus + capability gates but no `mods/` supercrate. If the manifest/schema lands as a Tier-1 concern, it earns its own directory.
 2. **Should `aether` graduate?** Its paint primitives are reachable only via `graph-canvas` re-exports. If nothing else consumes it directly, it could fold.
 3. **`scrying-renderer` placement** — currently at `verso/scrying-renderer/` (it's a renderer for the verso surface layer), while `scrying-engine` is at `inker/engines/scrying-engine/` (it's the content-producer half). The split is correct in role but easy to confuse; the crate-name pass kept both names.
-4. **`orrery` consumers** — the orrery renderer in `mere/host` is the only one. If the tier framework grows host-side dashboards, those move into `orrery` proper instead of `host/src/orrery_renderer.rs`.
-5. **File-size ceiling check** — the 600-LOC rule lives in workspace memory; after the rename pass, no file in `mere/host/` is over the line but several substrate / kernel files are close. Worth a sweep when next touched.
+4. **`orrery` consumers** — the orrery renderer in `mere/host` *(historical citation)* <!-- doc-audit: historical-path --> is the only one. If the tier framework grows host-side dashboards, those move into `orrery` proper instead of `host/src/orrery_renderer.rs`.
+5. **File-size ceiling check** — the 600-LOC rule lives in workspace memory; after the rename pass, no file in `mere/host/` *(historical citation)* <!-- doc-audit: historical-path --> is over the line but several substrate / kernel files are close. Worth a sweep when next touched.
 
 ## 6. Pointers
 
@@ -235,10 +235,10 @@ green: full `cargo build` + tests at the same counts as before the move (kernel
 ### Staleness flag (deferred)
 
 §§1–5 above predate **both** the genet-as-host flip **and** this dissolution.
-They still describe `crates/mere/host` + `host-substrate` as the binary — the host
+They still describe `crates/mere/host` *(historical citation)* <!-- doc-audit: historical-path --> + `host-substrate` as the binary — the host
 is now **`meerkat`** (genet-as-host; see the [genet host flip plan](../../archive_docs/2026-06-10_completed_plans/2026-06-01_genet_host_flip_plan.md)),
 and several crates named there (`spatial-substrate`, `host-ports`, `control-plane`,
-`register-renderer`, `verso/scrying-renderer`, `crates/mere/host-substrate`) have
+`register-renderer`, `verso/scrying-renderer`, `crates/mere/host-substrate` *(historical citation)* <!-- doc-audit: historical-path -->) have
 since moved, merged, or been cut. The cluster tree in this §7 is the current
 structural truth for the former `graphshell/` crates; a full §1–5 refresh against
 the post-flip workspace is a separate pass, not done here.
@@ -254,7 +254,7 @@ graph-positioning path is `gyre` (rapier physics) → `cartography::Projection` 
 
 Outcome:
 
-- **`crates/orrery/arrangements`** (new): the keep-worthy deterministic layouts
+- **`crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> (new):** the keep-worthy deterministic layouts
   recaptured from `graph-layout` — penrose (P2/P3 aperiodic tilings), l-system
   (Hilbert/Koch/Dragon), static (grid / phyllotaxis / radial), axial (kanban /
   timeline), semantic embedding + edge-weight, the `curves` helpers, and the
@@ -291,7 +291,7 @@ owns cached content), leaving `verso-core` a 2k-LOC intent reservation with
 one external export and `tile-state` with zero consumers beyond a
 session-runtime re-export nothing downstream used. Outcome:
 
-- **`crates/verso/` deleted** (`verso-core` + `tile-state`; git-revivable).
+- **`crates/verso/` *(historical citation)* <!-- doc-audit: historical-path --> deleted** (`verso-core` + `tile-state`; git-revivable).
 - **`SurfaceTargetId` inlined into `inker::routing`** (its sole external
   export; every use site already imported it via inker paths, so no caller
   changed).

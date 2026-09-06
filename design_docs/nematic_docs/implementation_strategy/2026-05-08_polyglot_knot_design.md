@@ -1,6 +1,6 @@
 # Polyglot Knot Design — Protocol-Faithful Clip Composition
 
-> **Paths note, 2026-09-02.** `crates/middlenet-core/` is the pre-rename home
+> **Paths note, 2026-09-02.** `crates/middlenet-core/` *(historical citation)* <!-- doc-audit: historical-path --> is the pre-rename home
 > of what is now nematic; the path is kept as written because this document is
 > retained as rationale and format spec, not as a map of the tree.
 **Date**: 2026-05-08
@@ -12,7 +12,7 @@
 - `../../mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md` (`mere/design_docs/mere_docs/implementation_strategy/2026-05-05_protocol_architecture_plan.md`) — protocol architecture
 - `../../mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md` (`mere/design_docs/mere_docs/implementation_strategy/2026-05-09_post_engine_layer_priorities.md`) — current forward-looking plan
 - Archived: `../../archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md` (`mere/design_docs/archive_docs/2026-05-09_engine_layer_complete/2026-05-06_graphshell_migration_plan.md`) — engine layer + smolweb stub history
-- Inherited: `SemanticDocument` (archived graphshell repo, `crates/middlenet-core/src/document.rs`) — donor's universal document model that this plan generalises
+- Inherited: `SemanticDocument` (archived graphshell repo, `crates/middlenet-core/src/document.rs` *(historical citation)* <!-- doc-audit: historical-path -->) — donor's universal document model that this plan generalises
 
 ---
 
@@ -372,7 +372,7 @@ anything" for import while djot is the native author format).
 ## HTML projection (added 2026-08-13)
 
 `EngineDocument::to_html` landed in inker (now in genet:
-`components/inker/src/document/render/html.rs`) as the universal-browser
+`components/inker/src/document/render/html.rs` *(historical citation)* <!-- doc-audit: historical-path -->) as the universal-browser
 projection beside `to_markdown` / `to_gemini` / `to_knot` / `to_gophermap` /
 `to_text`: a body-fragment emitter, fully escaped, semantic variants keeping
 their intent as class names, link predicates carried as `data-predicate`.

@@ -9,7 +9,7 @@ the `dramatis` facade reservation stays empty until something imports it
 ## What was ratified
 
 The identity/contact tier gets a name that is not a collision with the
-in-product term *persona*: `crates/persona/` becomes **`crates/dramatis/`**
+in-product term *persona*: `crates/persona/` *(historical citation)* <!-- doc-audit: historical-path --> becomes **`crates/dramatis/`**
 (dramatis personae, the cast list: your faces and the other players). gaz moves
 in from its standalone repo. The bare `dramatis` crates.io name is claimed as a
 reservation for a possible future facade.
@@ -24,7 +24,7 @@ Considered and declined: gaz as the umbrella over the tier. gaz was defined
 |---|---|---|
 | `crates/dramatis/personae` | `personae` | identity + carry spine (me) |
 | `crates/dramatis/persona-picker` | `mere-persona-picker` | Cambium view over the roster |
-| `crates/dramatis/gazette` | `gazette` | handle resolution (finding them) |
+| `crates/dramatis/gazette` *(historical citation)* <!-- doc-audit: historical-path --> | `gazette` | handle resolution (finding them) |
 | `crates/dramatis/gaz` | `gaz` | stored contacts (keeping them) |
 
 > **Moved since (2026-08-23):** `gazette` was promoted out of this tier to
@@ -41,20 +41,20 @@ on package name and are unaffected.
 
 ### D1: tier rename
 
-- [x] `crates/persona/` renamed `crates/dramatis/`
+- [x] `crates/persona/` *(historical citation)* <!-- doc-audit: historical-path --> renamed `crates/dramatis/`
 - [x] Root `Cargo.toml`: 3 member paths + 4 workspace.dependencies paths updated
 - [x] README.md tier table row updated
 - [x] Dated plan docs deliberately NOT swept (receipts, per DOC_POLICY)
 
 ### D2: gaz relocation
 
-- [x] `repos/gaz` subtree-merged at `crates/dramatis/gaz` (history preserved,
+- [x] `repos/gaz` *(historical citation)* <!-- doc-audit: historical-path --> subtree-merged at `crates/dramatis/gaz` (history preserved,
       personae-consolidation precedent)
 - [x] Workspace member + `gaz = { path = ... }` dependency entry added
 - [x] gaz `Cargo.toml` repository field points at merely-made/mere; its bare
       `[workspace]` stub table removed so it joins mere's workspace
-- [x] Disposition ruled by Mark 2026-08-10: DELETE. repos/gaz +
-      merely-made/gaz and repos/dramatis + merely-made/dramatis all removed
+- [x] Disposition ruled by Mark 2026-08-10: DELETE. `repos/gaz` *(historical citation)* <!-- doc-audit: historical-path --> +
+merely-made/gaz and `repos/dramatis` *(historical citation)* <!-- doc-audit: historical-path --> + merely-made/dramatis all removed
       (gaz history lives in mere via the subtree merge; the dramatis stub
       moved to crates/dramatis/dramatis and 0.0.2 published so the registry
       points at mere). Next gaz publish (0.1.0 per its founding plan) happens
@@ -63,7 +63,7 @@ on package name and are unaffected.
 ### D3: the claim
 
 - [x] `dramatis` 0.0.1 reservation published (seven-file stub anatomy per the
-      tulpa pattern, MIT/Apache, ed2024), local repo `repos/dramatis`,
+tulpa pattern, MIT/Apache, ed2024), local repo `repos/dramatis` *(historical citation)* <!-- doc-audit: historical-path -->,
       GitHub merely-made/dramatis
 
 ### D4: deferred, explicitly not this session
@@ -134,7 +134,7 @@ supersede it.
   relative personae paths (servitor, commons-spine) escaped the workspace-table
   sweep and were fixed in a follow-up commit; the lesson is that consumers path
   tier crates relatively, so a tier rename greps for `persona/`, not just
-  `crates/persona`. gaz: 41 tests + doctest green from the workspace. dramatis
+`crates/persona` *(historical citation)* <!-- doc-audit: historical-path -->. gaz: 41 tests + doctest green from the workspace. dramatis
   0.0.1 published; merely-made/dramatis created. D4 remains deferred. Open with
   Mark: repos/gaz + merely-made/gaz disposition.
 - 2026-08-10, follow-up: Mark noticed bare `gazetteer` is taken on crates.io
@@ -149,7 +149,7 @@ supersede it.
   the header and the D4 checklist now say so. Only the empty `dramatis`
   facade reservation remains, still waiting for an importing consumer.
 - 2026-08-27: **`emblem` renamed `insigne`**, and the name `emblem` reassigned
-  to the IconVG decoder (`repos/emblem`, formerly `repos/iconvg`). Mark's call,
+to the IconVG decoder (`repos/emblem`, formerly `repos/iconvg` *(historical citation)* <!-- doc-audit: historical-path -->). Mark's call,
   on fit asymmetry: here `emblem` worked by one metaphorical hop (an identity
   proof is *like* a heraldic badge), whereas an icon simply *is* an emblem —
   that is the older word for the thing — and Greek *emblēma* means inlaid work,

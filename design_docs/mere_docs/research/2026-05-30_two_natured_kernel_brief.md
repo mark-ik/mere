@@ -25,7 +25,7 @@ engine already inside it) bears on the answer.
 - [composition spine](../technical_architecture/2026-05-21_mere_composition_spine.md)
   — "graph truth, projected into surfaces"; the authority asymmetry this brief
   leans on (§14.1 pin/save write-back).
-- [genet-as-host eval](../technical_architecture/2026-05-29_genet_as_host_evaluation.md)
+- [genet-as-host eval](../technical_architecture/2026-05-29_genet_as_host_evaluation.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — §6 orrery-as-element; the forcing function for naming the experience core.
 - [cartography-aether seam](../technical_architecture/2026-05-29_cartography_aether_layout_seam.md)
   — the rapier substrate (`gyre`, the crate formerly named `aether`) as a
@@ -103,7 +103,7 @@ authoritative, experience derived.**
 Mere already encodes that asymmetry:
 
 - The spine: "graph truth, projected into composable surfaces."
-- [genet-as-host §6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md):
+- [genet-as-host §6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md) *(historical citation)* <!-- doc-audit: historical-link -->:
   "petgraph stays the truth; the DOM children and the scene are a projection of it."
 - [spine §14.1](../technical_architecture/2026-05-21_mere_composition_spine.md):
   arrangement facts promote into durable graph Arrangement-relations "only on an
@@ -133,7 +133,7 @@ by `NodeKey`, stepped by a system each frame. The experience nature of the kerne
 is not a green-field idea; half of it is shipping as the rapier integrator.
 
 genet-as-host sharpens the other half.
-[§6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md) describes
+[§6](../technical_architecture/2026-05-29_genet_as_host_evaluation.md) *(historical citation)* <!-- doc-audit: historical-link --> describes
 the orrery as per-node state that is textbook entity-component: world position
 (the integrator), cull/visibility (`cull_aabb`), LOD and materialization state (a
 real DOM subtree versus a paint glyph), focus halo, external-texture binding.

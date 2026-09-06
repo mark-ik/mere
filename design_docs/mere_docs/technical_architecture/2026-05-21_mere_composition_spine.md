@@ -30,7 +30,7 @@ host/realization rows (§1, §7, §9, §12) are pre-flip; read them through the
 > §1/§7/§9/§12 refresh is still owed (topology doc, staleness flag).
 
 Refines (does not
-replace) [`2026-05-21_app_architecture_rescaffold.md`](2026-05-21_app_architecture_rescaffold.md)
+replace) [`2026-05-21_app_architecture_rescaffold.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-21_app_architecture_rescaffold.md)
 — that doc fixed the *framework* question (chrome = idiomatic Xilem, retire
 substrate-as-host, no action bus); this doc fixes the *arrangement ontology* it
 left vague, and **corrects its "collapse forme/platen" claim** (§9).
@@ -187,7 +187,7 @@ stays parked.
 - **Host (Xilem)** renders the plan as a view tree: FrameTree → `split` views;
   a tree-projected workbench → tile content placed at platen-computed rects (the
   between-tiles geometry is platen's, via morphorm — see the
-  [between-tiles layout seam](2026-05-26_between_tiles_layout_seam.md); Masonry
+  [between-tiles layout seam](../../archive_docs/2026-06-09_pivot_superseded/2026-05-26_between_tiles_layout_seam.md); Masonry
   owns only within-tile content); the orrery → the `GraphCanvas` Masonry widget
   (the cartography projection); Verso surfaces → each tile's content compositor
   (in-scene paint or embedded texture).
@@ -207,7 +207,7 @@ model→plan layers (forme, platen) and "chrome = idiomatic Xilem" (now an
 `xilem_core` backend beside Masonry) intact. platen loses Morphorm to genet's
 taffy; the orrery becomes a custom-paint element with physics-positioned DOM
 children. See the
-[genet-as-host evaluation](2026-05-29_genet_as_host_evaluation.md) for the
+[genet-as-host evaluation](../../archive_docs/2026-06-09_completed_plans/2026-05-29_genet_as_host_evaluation.md) for the
 decision, pros/cons, and the worked orrery + platen consequences.
 
 ## 10. Costs we accept (and the guardrails)

@@ -3,19 +3,19 @@
 **Date**: 2026-05-11
 **Status**: Design brief — supersedes the earlier "sticky-note fork-model decision brief" (same date), which framed this as three competing options. The resolution is that those weren't options to pick between — they were three coexisting operations the user picks at gesture time.
 
-**Naming note (2026-05-17)**: This brief was written when the workbench arrangement authority crate was called `forme`. It has since been renamed to `forme` (per the [lineage / forme rename plan](../implementation_strategy/2026-05-17_lineage_forme_rename_plan.md)). The body below still says "forme" — read those as "forme" until a follow-up edits the prose. Function/type identifiers like `GraphletRef`, `GraphletBinding::Forked`, `GraphTree<NodeKey>` stay valid (only the crate name changed).
+**Naming note (2026-05-17)**: This brief was written when the workbench arrangement authority crate was called `forme`. It has since been renamed to `forme` (per the [lineage / forme rename plan](../../archive_docs/2026-06-09_completed_plans/2026-05-17_lineage_forme_rename_plan.md)). The body below still says "forme" — read those as "forme" until a follow-up edits the prose. Function/type identifiers like `GraphletRef`, `GraphletBinding::Forked`, `GraphTree<NodeKey>` stay valid (only the crate name changed).
 
-> **Crate-name note (2026-06-09 audit):** host-file references below (`crates/mere-host/src/tearout.rs`, `host_helpers.rs`, `host_navigation.rs`) are gpui-era; `mere-host`→`meerkat` and `mere-kernel`→`graph/graph-kernel`. The leaf/branch/fork model holds; the file homes moved with the host pivot.
+> **Crate-name note (2026-06-09 audit):** host-file references below (`crates/mere-host/src/tearout.rs` *(historical citation)* <!-- doc-audit: historical-path -->, `host_helpers.rs`, `host_navigation.rs`) are gpui-era; `mere-host`→`meerkat` and `mere-kernel`→`graph/graph-kernel`. The leaf/branch/fork model holds; the file homes moved with the host pivot.
 **Scope**: Defines the three tear-out operations Mere supports (**leaf**, **branch**, **fork**), their identity semantics in terms of `SessionId` / `GraphId` / `GraphletId`, the gesture model that selects between them (modifier-keyed drags + a toast for ambiguous gestures), and the substrate primitives they rest on (forme graphlets, eidetic engrams, short-term memory). Resolves §11.3 of the [browser multiplexer framing brief](2026-05-11_browser_multiplexer_framing.md).
 
 **Related**:
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) — §11.3 raised the question; the answer in this brief replaces the three-option framing with a three-operation one.
 - [`2026-05-11_memory_tiers_brief.md`](2026-05-11_memory_tiers_brief.md) — short-term vs. long-term memory partitioning. Diff/branch state lives in short-term by default; consolidation into engrams is an affirmative gesture. This brief depends on the memory-tiers framing for its diff substrate.
-- [`../implementation_strategy/2026-05-11_graph_session_manifest_plan.md`](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md) — `parent_session` reference fields used by **fork**.
-- Phase 2 Part 1 tear-out: [`crates/mere-host/src/tearout.rs`](../../../crates/mere-host/src/tearout.rs). The current sticky-note implementation is the **leaf** operation in this brief's vocabulary, made explicit.
+- [`../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md`](../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md) — `parent_session` reference fields used by **fork**.
+- Phase 2 Part 1 tear-out: [`crates/mere-host/src/tearout.rs`](../../../crates/mere-host/src/tearout.rs) *(historical citation)* <!-- doc-audit: historical-link -->. The current sticky-note implementation is the **leaf** operation in this brief's vocabulary, made explicit.
 - Graphlet primitives: [`crates/forme/forme/src/graphlet.rs`](../../../crates/forme/forme/src/graphlet.rs) — `GraphletId`, `GraphletRef`, `GraphletBinding::{UnlinkedSession, Linked, Branched}`. Already first-class (the types + reconciliation are unit-tested); **branch** uses these. Note (2026-06-25): the layer is built but **not yet wired into the live shell** — no live `GraphTree` exists outside forme's tests, so branch needs that wiring first (its own plan).
-- Eidetic engrams: [`crates/eidetic/src/engram.rs`](../../../crates/eidetic/src/engram.rs) — content-addressed immutable snapshots; the long-term substrate for consolidated branches and forks.
+- Eidetic engrams: [`crates/eidetic/src/engram.rs`](../../../crates/eidetic/src/engram.rs) *(historical citation)* <!-- doc-audit: historical-link --> — content-addressed immutable snapshots; the long-term substrate for consolidated branches and forks.
 
 ---
 
@@ -185,11 +185,11 @@ Two architectural commitments this brief depends on. Both are flagged here so th
 
 ### 6.1 Node-per-tile (committed 2026-05-11)
 
-Today, [`host_helpers::ensure_node_for_address_near`](../../../crates/mere-host/src/host_helpers.rs) creates a new node on every omnibar submit with a new URL. That's **node-per-navigation**. This brief assumes **node-per-tile**: a new node exists only when the user creates a new tile; within-tile navigation adds lineage edges, not nodes.
+Today, [`host_helpers::ensure_node_for_address_near`](../../../crates/mere-host/src/host_helpers.rs) *(historical citation)* <!-- doc-audit: historical-link --> creates a new node on every omnibar submit with a new URL. That's **node-per-navigation**. This brief assumes **node-per-tile**: a new node exists only when the user creates a new tile; within-tile navigation adds lineage edges, not nodes.
 
 Implementation impact (out of scope for this brief; needs its own plan):
 
-- `navigate_to` (in [`host_navigation.rs`](../../../crates/mere-host/src/host_navigation.rs)) reshapes: navigation within an existing tile updates lineage in forme without calling `ensure_node_for_address_near`.
+- `navigate_to` (in [`host_navigation.rs`](../../../crates/mere-host/src/host_navigation.rs) *(historical citation)* <!-- doc-audit: historical-link -->) reshapes: navigation within an existing tile updates lineage in forme without calling `ensure_node_for_address_near`.
 - Opening a new tile (omnibar submit when no active tile, or explicit "open in new tile" gesture) is what creates a new mere-kernel node.
 - Lineage edges in forme become the primary record of within-tile traversal history.
 
@@ -206,7 +206,7 @@ New framing: **implement the leaf / branch / fork trichotomy + toast + memory-ti
 
 Concrete deliverables:
 
-1. **Toast UI** on no-modifier tear-out drag. Three buttons + auto-dismiss. Routes through the action bus (per the [typed action bus plan](../implementation_strategy/2026-05-11_typed_action_bus_plan.md)).
+1. **Toast UI** on no-modifier tear-out drag. Three buttons + auto-dismiss. Routes through the action bus (per the [typed action bus plan](../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md)).
 2. **Leaf operation** — already implemented as today's `TearOutTileAsStickyNote`. Renamed action: `TearOutTileAsLeaf`. Behaviour unchanged. (Or keep the old action name as an alias if external configs reference it.)
 3. **Branch operation** — new action `TearOutTileAsBranch`:
    - Creates `GraphletRef` in donor's forme with `GraphletBinding::Branched`.

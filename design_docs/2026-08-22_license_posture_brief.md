@@ -239,7 +239,7 @@ provided the notice is retained.
 
 - mere's workspace does not resolve on this machine: genet `55c05d11`
   ("Retire Stylo and the incumbent layout cone", 2026-08-21 01:56) deleted
-  `components/genet-layout/Cargo.toml`, while mere's `.cargo/config.toml`
+   `components/genet-layout/Cargo.toml` *(historical citation)* <!-- doc-audit: historical-path -->, while mere's `.cargo/config.toml`
   still patches `genet-layout` to that path. Any `cargo metadata` over mere
   fails until that entry is retired. Reported, not touched; another lane owns
   it.

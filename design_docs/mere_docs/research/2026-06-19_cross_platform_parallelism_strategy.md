@@ -41,7 +41,7 @@ fragment phases on the 578 KB page, native release. Until that breakdown exists,
 ### Step 0 result (2026-06-21) — measured on synthetic AND real pages
 
 Instrumented `layout_via_box_tree` with env-gated phase timers and built a
-breakdown harness (`genet/components/genet-layout/examples/phase_timing.rs`;
+breakdown harness (`genet/components/genet-layout/examples/phase_timing.rs` *(historical citation)* <!-- doc-audit: historical-path -->;
 `GENET_LAYOUT_TIMING=1`, native release, fresh `TextMeasureCtx` per pass = a true
 cold first paint). Two pages, shares of **cold paint (cascade + layout)**:
 
@@ -571,4 +571,4 @@ the **app lane**, not the browser lane.
   `mere/crates/meerkat/src/content/{mod.rs,actor.rs,transfer.rs}`,
   `mere/crates/meerkat/src/main.rs:{775,919-926}`,
   `mere/crates/orrery/orrery/src/physics.rs:{11,25}`
-- `mere/design_docs/mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md`
+- `mere/design_docs/mere_docs/implementation_strategy/2026-06-03_actor_constellation_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->

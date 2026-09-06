@@ -6,7 +6,7 @@
 amendments remain authoritative: corrected knot consumer graph, restored
 mesh/scheduler boundaries, host-side device policy, narrowed servitor
 language, and separate portability and repository-promotion gates. Supersedes
-the first draft written in `repos/esp/design_docs/`; that file is now a pointer
+the first draft written in `repos/esp/design_docs/` *(historical citation)* <!-- doc-audit: historical-path -->; that file is now a pointer
 here. D2's configured embedding matrix and first exact browser decoder row now
 pass, including cooperative token-boundary cancellation, explicit browser
 device teardown, and exact recovery in a fresh worker. Physical GPU-allocation
@@ -55,7 +55,7 @@ holds the ledger, it does not absorb the lanes.
 
 1. **esp lives in mere**, at `crates/intel/esp`, publishing from mere exactly as
    vates and sibylla do today. This follows the 2026-07-23 repo consolidation
-   rather than reversing it; `repos/esp` stays as the name-reservation repo and
+   rather than reversing it; `repos/esp` *(historical citation)* <!-- doc-audit: historical-path --> stays as the name-reservation repo and
    a pointer. Promote out later if and only if a consumer outside mere
    materializes (§5 names the triggers).
 2. **One crate, two namespaces**: `esp::infer` (vates, 14 files) and
@@ -72,7 +72,7 @@ holds the ledger, it does not absorb the lanes.
 
 ## 2. The consumer graph (verified, and why this is small)
 
-`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` **and `ports/knot`**
+`vates` ← `mere-infer` only. `sibylla` ← `mere-embed` **and `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->**
 (`sibylla.workspace = true`, knot:51). `mere-embed` ← `eidetic-search` only.
 **`mere-infer` ← nobody**: it exists to re-export vates under `infer::` paths,
 nothing imports it, and its only original content is one integration test.
@@ -127,7 +127,7 @@ Two side-findings the consolidation collects:
   name. Sweep the record in the same pass: mere's root README, DOC_README
   (including the stale "scoped, not started" line on the index burn lift, §2),
   supersession banners on the two founding proposals, package metadata, and
-  the `repos/esp` pointer.
+   the `repos/esp` *(historical citation)* <!-- doc-audit: historical-path --> pointer.
 - **E4 — publish esp, then compatibility shims.** Order matters because
   published versions are permanent: `esp` 0.1.0 first, then final `vates` and
   `sibylla` releases that depend on esp and re-export their old APIs with
@@ -308,7 +308,7 @@ implies. If the halves ever diverge, the intermediate is `esp-infer` +
 
 ## 6. Progress
 
-- **2026-08-08**: first draft written standalone in `repos/esp`; Mark ruled esp
+- **2026-08-08**: first draft written standalone in `repos/esp` *(historical citation)* <!-- doc-audit: historical-path -->; Mark ruled esp
   lives in mere, one crate, `esp::infer` + `esp::embed` accepted, and asked for
   the plan to reconnect to the research corpus and for servitor's place in it.
   This version does both; the standalone draft is now a pointer. Consumer graph

@@ -6,9 +6,9 @@
 the cheap, in-stack dimensional mode (an isometric, orbitable camera with fake height) over the
 existing 2D rapier physics, with no rapier3d and no new render lane. Full 3D stays the gated long
 pole in its own plan.
-**Code**: `crates/orrery/orrery` (`CameraView`, `frame.rs`, `lib.rs` camera math, `input.rs`
-gestures), `crates/platen/platen/src/scene_paint.rs` (the ground `Camera` + `PushTransform`),
-`crates/system/session-runtime` (`view_intent_store` camera persistence), `crates/meerkat`
+**Code**: `crates/orrery/orrery` *(historical citation)* <!-- doc-audit: historical-path --> (`CameraView`, `frame.rs`, `lib.rs` camera math, `input.rs`
+gestures), `crates/platen/platen/src/scene_paint.rs` *(historical citation)* <!-- doc-audit: historical-path --> (the ground `Camera` + `PushTransform`),
+`crates/system/session-runtime` *(historical citation)* <!-- doc-audit: historical-path --> (`view_intent_store` camera persistence), `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path -->
 (the mode command + the focused content card anchor).
 
 **Related**:

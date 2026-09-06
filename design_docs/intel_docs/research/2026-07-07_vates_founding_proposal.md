@@ -44,7 +44,7 @@ want it independently:
 - **mere** itself (its statistical-intelligence tier), the current owner.
 - **Isometry** (a standalone Merely-stack app), for the optional DM-loaded
   model lane: the DM-in-the-loop dialog system, recap, RAG, generation. See
-  isometry `design_docs/2026-07-07_optional_intelligence_vision.md`, section
+  isometry `design_docs/2026-07-07_optional_intelligence_vision.md` *(historical citation)* <!-- doc-audit: historical-path -->, section
   3.5 (the recommended inference architecture is exactly this seam: DM-only,
   external-endpoint-first, burn as the eventual swap).
 
@@ -57,7 +57,7 @@ prophet (Latin *vates*): it both voices (speaks as characters) and foretells
 
 ## 3. Origin and what is ported
 
-Promoted from `mere/crates/intel/infer`. Ported in this founding commit, MPL
+Promoted from `mere/crates/intel/infer` *(historical citation)* <!-- doc-audit: historical-path -->. Ported in this founding commit, MPL
 headers intact, mere-internal doc references genericized:
 
 - `provider.rs`: the `InferenceProvider` trait, `ModelCapability` /
@@ -134,11 +134,11 @@ armillary proves broadly wanted across the ecosystem.
 
 **Update (2026-07-07): resolved as option 2.** armillary was read (732 LOC, one
 external dep `tracing`, host-neutral) and promoted to a standalone crate the same
-day at `repos/armillary`. Three consumers cleared the bar: mere/meerkat, this
+day at `repos/armillary` *(historical citation)* <!-- doc-audit: historical-path -->. Three consumers cleared the bar: mere/meerkat, this
 crate's actor (P2), and Isometry's serval host. So vates's actor depends on
 armillary rather than reimplementing a primitive; consumers still get streaming
 off the main thread for free, now from a shared crate. See
-`repos/armillary/design_docs/2026-07-07_armillary_founding_proposal.md`.
+`repos/armillary/design_docs/2026-07-07_armillary_founding_proposal.md` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 ## 6. Backend selection
 
@@ -176,7 +176,7 @@ hardcodes a runtime.
 ## 8. Open questions
 
 1. **armillary** (section 5): RESOLVED 2026-07-07 as promote. armillary is now a
-   standalone crate (`repos/armillary`); vates's actor depends on it. (Was:
+   standalone crate (`repos/armillary` *(historical citation)* <!-- doc-audit: historical-path -->); vates's actor depends on it. (Was:
    portable primitive vs promote vs keep mere-side.)
 2. **License** (section 7): MPL-2.0 or relicense to MIT/Apache before publish.
 3. **embed promotion:** a separate `vates`-sibling crate for the embedder, or
@@ -191,7 +191,7 @@ hardcodes a runtime.
 
 ## Provenance
 
-Grounded in a read of `mere/crates/intel/infer` (lib, provider, canned,
+Grounded in a read of `mere/crates/intel/infer` *(historical citation)* <!-- doc-audit: historical-path --> (lib, provider, canned,
 Cargo.toml) 2026-07-07. The name and the consumer-side vision are recorded in
-the isometry `design_docs/2026-07-07_optional_intelligence_vision.md` and the
+the isometry `design_docs/2026-07-07_optional_intelligence_vision.md` *(historical citation)* <!-- doc-audit: historical-path --> and the
 workspace memory `project_vates_inference_crate`.

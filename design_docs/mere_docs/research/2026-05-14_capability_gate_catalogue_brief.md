@@ -1,15 +1,15 @@
 # Capability-gate catalogue brief
 
 **Date**: 2026-05-14
-**Status**: Research brief — enumerates the v0 capability gates and the layered policy model that resolves them. **Resolution superseded 2026-05-30**: the "first-match-wins" chain here is replaced for permissions by the narrowing rule in [`kernel::permissions`](../implementation_strategy/2026-05-27_adoption_roadmap.md) (most-restrictive-wins across a five-scope hierarchy — first-match could let a broader opinion win over a stricter narrower one, the wrong direction for security). The capability *vocabulary* and the three-state decision carry forward; `RequireConsent` is now `Permission::Prompt`.
+**Status**: Research brief — enumerates the v0 capability gates and the layered policy model that resolves them. **Resolution superseded 2026-05-30**: the "first-match-wins" chain here is replaced for permissions by the narrowing rule in [`kernel::permissions`](../implementation_strategy/2026-05-27_adoption_roadmap.md) *(historical citation)* <!-- doc-audit: historical-link --> (most-restrictive-wins across a five-scope hierarchy — first-match could let a broader opinion win over a stricter narrower one, the wrong direction for security). The capability *vocabulary* and the three-state decision carry forward; `RequireConsent` is now `Permission::Prompt`.
 **Scope**: Concretise the gate set the framing brief §7 names but doesn't enumerate, define the policy chain (action → session → persona → app), and pin down how denials flow into diagnostics. Sits between the framing brief's principle and the gate enforcement landing in the action bus.
 
 **Related**:
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) §7 — security principle; §8 — `permission.denied` event shape; §5.8 — action bus that gates attach to.
-- [`../implementation_strategy/2026-05-11_typed_action_bus_plan.md`](../implementation_strategy/2026-05-11_typed_action_bus_plan.md) — the bus design these gates plug into. The `PermissionGate` trait now lives in `graphshell-control-plane` (`PermitEverythingGate`, `RefuseEverythingGate`); this brief specifies the *real* policy gate that replaces them.
+- [`../implementation_strategy/2026-05-11_typed_action_bus_plan.md`](../implementation_strategy/2026-05-11_typed_action_bus_plan.md) *(historical citation)* <!-- doc-audit: historical-link --> — the bus design these gates plug into. The `PermissionGate` trait now lives in `graphshell-control-plane` (`PermitEverythingGate`, `RefuseEverythingGate`); this brief specifies the *real* policy gate that replaces them.
 - [`2026-05-14_persona_model_brief.md`](2026-05-14_persona_model_brief.md) — defines persona-scoped overrides; this brief picks them up.
-- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `SessionPolicy.overrides: Vec<SessionPolicyOverride>` is the placeholder this brief fills.
+- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) *(historical citation)* <!-- doc-audit: historical-link --> — `SessionPolicy.overrides: Vec<SessionPolicyOverride>` is the placeholder this brief fills.
 
 ---
 

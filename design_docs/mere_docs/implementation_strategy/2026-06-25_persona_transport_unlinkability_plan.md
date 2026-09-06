@@ -8,14 +8,14 @@ ceiling are a named research track. No code yet.
 This doc owns the persona-transport privacy model: how a persona's network presence is
 (or is not) linkable to you and to your other personas, what modes we offer, and how a
 persona's transport choice couples to its tessera standing. It sits between the identity
-crate (`crates/persona/identity`), the transport (`crates/murm/transport`), and the
-standing layer (`crates/moot/gemot/src/tessera`).
+crate (`crates/persona/identity` *(planned target)* <!-- doc-audit: planned-path -->), the transport (`crates/murm/transport`), and the
+standing layer (`crates/moot/gemot/src/tessera` *(planned target)* <!-- doc-audit: planned-path -->).
 
 ## The axis: anonymity is the opposite of reputation
 
 The frame that ties everything together: **reputation is the cost of continuity;
 anonymity is the cost of starting over.** Standing accrues at a persona chain root
-([`persona_chain.rs`](../../../crates/moot/gemot/src/tessera/persona_chain.rs)); a
+([`persona_chain.rs`](../../../crates/moot/gemot/src/tessera/persona_chain.rs) *(planned target)* <!-- doc-audit: planned-link -->); a
 face that carries standing is, by carrying it, more linkable. A fully unlinkable face is
 a fresh zero-standing chain. So a persona's transport mode and its standing tier are one
 slider, not two:
@@ -27,7 +27,7 @@ slider, not two:
 | **Burner** | fresh chain, zero standing (below the gate's posting threshold until earned or vouched) | most-unlinkable transport (own-cluster, friend-relay, or the Nym ceiling) |
 
 The gate already enforces the bottom row: a fresh chain sits below `posting_threshold`
-([`gate.rs`](../../../crates/moot/gemot/src/tessera/gate.rs)), so a burner's transport
+([`gate.rs`](../../../crates/moot/gemot/src/tessera/gate.rs) *(planned target)* <!-- doc-audit: planned-link -->), so a burner's transport
 privacy is a free cost. Picking a persona therefore picks a face, a reputation, and a
 transport profile at once. The product surface is one gesture, not a settings maze: a
 **burner** button mints a fresh chain on the most-private transport; a **main** is the

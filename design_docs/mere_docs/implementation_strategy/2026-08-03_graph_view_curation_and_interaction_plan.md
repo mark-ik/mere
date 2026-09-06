@@ -270,11 +270,11 @@ the next public contract is designed.
 
 - Mere: `crates/canvas/canvas/src/input.rs`, `edge_cells.rs`, `selection.rs`
 - Mere: `crates/graph/graph-kernel/src/graph/journal.rs`
-- Mere: `crates/system/session-runtime/src/view_intent_store.rs`
-- Genet: `components/cambium/cambium/src/pointer.rs`, `slider.rs`,
+- Mere: `crates/system/session-runtime/src/view_intent_store.rs` *(historical citation)* <!-- doc-audit: historical-path -->
+- Genet: `components/cambium/cambium/src/pointer.rs` *(historical citation)* <!-- doc-audit: historical-path -->, `slider.rs`,
   `graph_canvas.rs`
-- Isometry: `crates/isometry-views/src/overmap.rs`
-- mer3ly: `assets/repo-graph.js`, `crates/repo-graph`, authority/site builders
+- Isometry: `crates/isometry-views/src/overmap.rs` *(historical citation)* <!-- doc-audit: historical-path -->
+- mer3ly: `assets/repo-graph.js`, `crates/repo-graph` *(historical citation)* <!-- doc-audit: historical-path -->, authority/site builders
 
 Add focused characterization tests where the baseline lacks one. Record two
 small fixture graphs:
@@ -482,7 +482,7 @@ cargo test -p isometry-views
 
 # mer3ly
 cargo test --locked
-cargo test --manifest-path crates/repo-graph/Cargo.toml --locked
+cargo test --manifest-path crates/repo-graph/Cargo.toml *(historical citation)* <!-- doc-audit: historical-path --> --locked
 npm run smoke
 ```
 

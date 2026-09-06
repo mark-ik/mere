@@ -48,7 +48,7 @@ later).
 
 ## Why it fits meerkat as-is (findings, verified)
 
-- The **content actor** ([crates/meerkat/src/content/mod.rs](../../../crates/meerkat/src/content/mod.rs))
+- The **content actor** ([crates/meerkat/src/content/mod.rs](../../../crates/meerkat/src/content/mod.rs) *(historical citation)* <!-- doc-audit: historical-link -->)
   runs off the UI thread, owns the genet cascade + nematic engines + a subresource
   cache, runs `render_content_scene`, and **ships a `Send` `Scene` back**; the kernel
   composites and stays sole GPU owner. So a lane that produces a `Scene` already has a
@@ -209,7 +209,7 @@ later).
   own fix to make.
 - **2026-07-01: scripted-feature break re-verified, then fixed same day.** `cargo
   check -p meerkat --features scripted` failed with the E0308 trait mismatch at
-  `content/actor.rs:33` (`pelt_core::ResourceFetcher` at `ports/pelt-core/lib.rs:125`
+  `content/actor.rs:33` (`pelt_core::ResourceFetcher` at `ports/pelt-core/lib.rs:125` *(historical citation)* <!-- doc-audit: historical-path -->
   vs `genet_scripted::ResourceFetcher` at `components/genet-scripted/lib.rs:36`; no
   bridging impl existed — pelt-desktop's `LocalFetcher` implements both traits
   separately). Fixed in the render-ladder plan's lane (see its 2026-07-01 progress

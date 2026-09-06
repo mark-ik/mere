@@ -8,7 +8,7 @@
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) §5.9 — sets the single-process daemon framing.
 - [`../implementation_strategy/2026-05-14_session_service_runner_plan.md`](../implementation_strategy/2026-05-14_session_service_runner_plan.md) — the SessionServiceRunner trait is deliberately sync + owned-id + value-error so it remotes cleanly.
-- [`../implementation_strategy/2026-05-11_typed_action_bus_plan.md`](../implementation_strategy/2026-05-11_typed_action_bus_plan.md) — the action bus is the natural IPC envelope.
+- [`../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md) — the action bus is the natural IPC envelope.
 
 ---
 

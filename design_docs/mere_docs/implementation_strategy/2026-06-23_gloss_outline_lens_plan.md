@@ -95,7 +95,7 @@ with Mark):
   apparatus + export, not read as "the gloss's private crate".) `graph-projection` was rejected
   to avoid overloading cartography / `forme::ProjectionLens` / the graph-rooted "projection" model.
 - **Location: `crates/graph/glossary/`,** beside `linked-data` + `node-lineage`, all children of
-  the graph supercrate. Moves out of `crates/orrery/` (the *spatial* view it no longer is).
+  the graph supercrate. Moves out of `crates/orrery/` *(historical citation)* <!-- doc-audit: historical-path --> (the *spatial* view it no longer is).
   **Considered and declined: folding `linked-data` into `glossary`** (Mark's question). The kinship
   is real (both `Graph -> representation`), but the `crates/graph/` supercrate already expresses it
   as siblings without a merge; linked-data is mature, RDF-dep-heavy, and the spine of two active

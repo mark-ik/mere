@@ -55,7 +55,7 @@ and lights up each protocol as its backend matures.
    `crates/shell/comms` (relocates with the domain layer if §7
    cleanup moves it).
 2. **Backend readiness is partial — this drove the decisions.**
-   - *misfin* (`crates/murm/misfin`) is **send + identity only**: `send_message`,
+   - *misfin* (`crates/murm/misfin` *(historical citation)* <!-- doc-audit: historical-path -->) is **send + identity only**: `send_message`,
      `identity_status`. There is **no receive / inbox / server** (hence decision 3).
      It is synchronous (std TCP + blocking rustls), self-contained.
    - *murm* (`crates/murm/murm`) is foundation: `SyncedCabal` (the LogSync lane)
@@ -69,7 +69,7 @@ and lights up each protocol as its backend matures.
    `titan_upload` write companion. misfin **send** (a client-cert TLS write to a
    recipient host:1958) is the same shape as titan upload. misfin **receive**
    (serving a mailbox) is a server, a different shape errand should not take on.
-4. **nematic already renders the body.** [`MisfinEngine`](../../../crates/inker/engines/nematic/src/misfin.rs)
+4. **nematic already renders the body.** [`MisfinEngine`](../../../crates/inker/engines/nematic/src/misfin.rs) *(historical citation)* <!-- doc-audit: historical-link -->
    parses a gemmail body as gemtext → `EngineDocument` (`message/x-misfin`); the
    *envelope* (sender / recipient / timestamp / cert trust) is the host's job, and
    trust stays `Unknown` until the host verifies the cert. So the pane feeds the
@@ -202,7 +202,7 @@ make it a live shell (compose, send, read, conversation list) with murm cabals
   mandates **no key algorithm** (any self-signed x509), and a **live server**
   (`satch.xyz`) accepts an Ed25519 client cert — a bogus-mailbox probe through
   `errand::misfin_send` returned status 51 (mailbox doesn't exist = cert accepted,
-  nothing delivered; `crates/probes/misfin-ed25519`). So the precedent is safe on
+  nothing delivered; `crates/probes/misfin-ed25519` *(historical citation)* <!-- doc-audit: historical-path -->). So the precedent is safe on
   all three axes: spec (agnostic), interop (live-confirmed), privacy (per-address
   salt + the standard master-derivation tradeoff). The crux: only **Ed25519** gives
   a *reproducible* cert (deterministic signatures, RFC 8032); the crate's current

@@ -4,7 +4,7 @@
 (platform boundary plan, P2), landing in `mere_docs/implementation_strategy/`;
 it moved again the same day into the new `cambium_docs/` area root Mark ruled
 for the Cambium family. Workbench is at `crates/cambium/workbench`;
-`components/workbench` below is genet's path before the move. The ruling below
+components/workbench below is genet's path before the move. The ruling below
 calls Workbench "Genet's reusable workspace-organization component"; that was
 true when it was written, and the boundary plan reclassed it as application
 composition, which is Mere's. Nothing about what it owns changed.
@@ -44,8 +44,8 @@ but Workbench itself stays reusable workspace furniture.
 
 ### 2026-08-31: the reusable core already exists under the wrong owner
 
-`components/genet-host-api/tile.rs` — since moved to
-`components/workbench/lib.rs`, the shim removed — was a zero-dependency split/tab tree with a
+The former genet-host-api tile shim, now represented by
+`crates/cambium/workbench/lib.rs`, was a zero-dependency split/tab tree with a
 shared reducer. Its documentation already says that Pelt owns its local tree
 while Mere projects Forme onto it. `DropTarget::Outside` already identifies the
 tearout boundary and deliberately leaves the tree unchanged for the embedding
@@ -81,7 +81,7 @@ shared types directly, as do the audited migrated consumers.
 
 ### W1. Establish the component
 
-Move the existing tile vocabulary and reducer into `components/workbench`.
+Move the existing tile vocabulary and reducer into `crates/cambium/workbench`.
 Add a `Workbench` state wrapper whose command result distinguishes an applied
 tree change, an unchanged command, and a `TearOut` host request. An outside drop
 must not remove the tile before a host accepts custody.

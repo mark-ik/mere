@@ -13,7 +13,7 @@ web platform with graph-native application behavior.
 - [shelfmark format note](mere_docs/technical_architecture/2026-08-16_shelfmark_format_note.md)
 - [family composition thesis](2026-08-12_family_composition_thesis_brief.md)
 - [Turnstone suite composition and capability census](2026-08-22_turnstone_suite_composition_and_capability_census.md)
-- Genet `components/cambium/ARCHITECTURE.md`
+- Genet `components/cambium/ARCHITECTURE.md` *(historical citation)* <!-- doc-audit: historical-path -->
 - Genet `docs/2026-08-12_meristem_scope_cut_and_component_contract_brief.md`
 - Genet `docs/2026-08-14_web_platform_host_contract_plan.md`
 

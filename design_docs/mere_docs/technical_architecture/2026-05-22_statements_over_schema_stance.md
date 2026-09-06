@@ -57,7 +57,7 @@ RDF describes resources. It never described the reading of them. RDF was built t
 
 **What it means for the substrate question.** "Build Mere-specifics on SPARQL, Turtle, JSON-LD" is right for the content graph and wrong for the workspace graph. Three positions:
 
-1. **Conservative (current).** One native kernel; add an open `predicate` IRI; curate. RDF stays a projection in and out. This is the [linked-data ingest/export plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md).
+1. **Conservative (current).** One native kernel; add an open `predicate` IRI; curate. RDF stays a projection in and out. This is the [linked-data ingest/export plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 2. **Radical.** Internal store becomes a quad store, everything is quads, SPARQL is the internal query, families become vocabulary on top. Rejected as the *substrate*: the workspace half runs at frame rate over mutable state, behavior dispatch wants exhaustive closed enums, a SPARQL engine is heavy in wasm, and "natively RDF" pulls toward the OWL/RDFS reasoning footgun this doc already excludes.
 3. **Split (the live option).** The content subgraph becomes a real SPARQL-queryable RDF store ([Oxigraph](https://crates.io/crates/oxigraph) is the wasm-capable Rust candidate); the browse and workspace graphs stay in the native kernel; the node IRI is the join key. This makes "build on RDF" true for the half where facts are shared, without the kernel becoming RDF.
 
@@ -89,7 +89,7 @@ The anti-scope, stated plainly so the principle is not over-applied:
 
 Incrementally. Each instance is a small, separate plan that points back here.
 
-- **First instance, in-flight:** open the Semantic predicate for linked-data ingest/export. See the [linked-data ingest/export plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md).
+- **First instance, in-flight:** open the Semantic predicate for linked-data ingest/export. See the [linked-data ingest/export plan](../implementation_strategy/2026-05-22_linked_data_ingest_export_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 - **Candidate next instances, named but not scheduled:** node properties as recognized predicates on the node-as-subject (closes the property-bag gap); `tags` and classifications as recognized vocabulary types; folding the scattered provenance and trust annotations into one statement-level annotation.
 
 Each lands only when a consumer needs it, under the composition spine's discipline. The principle is the through-line; the plans are the work.

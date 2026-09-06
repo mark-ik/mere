@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 **Date**: 2026-08-07
 **Status**: Phase A implemented and physically receipted, including a
@@ -46,7 +46,7 @@ Four facts are important, because they keep this from duplicating something
 that is already real:
 
 - `knot://vault/{id}` is the local address emitted for a vault document by
-  `ports/knot/src/endpoint.rs`. Its `vault` authority is not a remotely
+  `ports/knot/src/endpoint.rs` *(historical citation)* <!-- doc-audit: historical-path -->. Its `vault` authority is not a remotely
   resolvable host identity.
 - `knot_endpoint` is a local Graphshell projection endpoint. It gives a host a
   card/resource view; it does not expose raw Knot source over a network
@@ -78,7 +78,7 @@ The admission sequence in Graphshell is correct:
 
 `graphshell::carrier::accept_projection_session` is **not** the reusable
 function. It hard-codes `mere/graphshell/v1`, the Graphshell service path, and
-the `connect` action, while `ports/knot` only dev-depends on Graphshell. Making
+the `connect` action, while `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> only dev-depends on Graphshell. Making
 Knot depend on it would reverse the dependency graph.
 
 The reusable seam is lower:
@@ -244,7 +244,7 @@ return its authored body. An operation that is a deletion, another document,
 pending, unavailable to the holder, or not a document-producing event is
 `NotAvailable`.
 
-This needs a narrow history query in `ports/knot/src/sync.rs`; the existing
+This needs a narrow history query in `ports/knot/src/sync.rs` *(historical citation)* <!-- doc-audit: historical-path -->; the existing
 projection already collects causal history internally but exposes only current
 documents and heads. Add the query there. Do not reverse-engineer history from
 `KnotEndpoint` snapshots.
@@ -302,7 +302,7 @@ frames.
 
 Phase A emits the live native media type `text/vnd.knot`; it may also serve a
 selected `text/djot` document. `text/x-knot` is currently accepted by the
-renderer but is not the emitted type in `ports/knot`. Phase B must settle one
+renderer but is not the emitted type in `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->. Phase B must settle one
 canonical public registration or alias policy before calling either portable.
 
 ### 5.5 Request sequence
@@ -358,7 +358,7 @@ Graphshell.
 historical materialization, reader-bound ticket, and non-disclosing absence
 behaviour under focused tests.
 
-**Files:** `ports/knot/src/publish.rs` (new), `sync.rs`, `lib.rs`, and focused
+**Files:** `ports/knot/src/publish.rs` *(historical citation)* <!-- doc-audit: historical-path --> (new), `sync.rs`, `lib.rs`, and focused
 unit tests.
 
 Implement the explicit catalog, source eligibility, `KnotShareTicket`, pinned
@@ -376,7 +376,7 @@ or unrelated operation.
 **Status:** Complete for Phase A. The bounded versioned candidate codec remains
 an implementation detail rather than a published grammar.
 
-**Files:** `ports/knot/src/publish_wire.rs` (new), `Cargo.toml`, and codec
+**Files:** `ports/knot/src/publish_wire.rs` *(historical citation)* <!-- doc-audit: historical-path --> (new), `Cargo.toml`, and codec
 tests.
 
 Build and test a Phase-A-only candidate codec: start with postcard if it keeps
@@ -396,8 +396,8 @@ the protocol.
 **Status:** Complete. The host performs the Noise and Notochord admission path,
 retains authority through response selection, and observes later revocation.
 
-**Files:** `ports/knot/src/publish_carrier.rs` and
-`ports/knot/src/publish_host.rs` (new), `lib.rs`, normal dependencies on
+**Files:** `ports/knot/src/publish_carrier.rs` *(historical citation)* <!-- doc-audit: historical-path --> and
+`ports/knot/src/publish_host.rs` *(historical citation)* <!-- doc-audit: historical-path --> (new), `lib.rs`, normal dependencies on
 `notochord` and `transport` with its `noise` feature.
 
 Implement the sequence in section 5.5. `KnotPublishHost` owns policy,
@@ -417,7 +417,7 @@ identities, issues the holder's ticket out of band, and has both endpoint and
 direct-LAN mDNS receipt routes. Turnstone supplies explicit owner Publishing
 and recipient Shared Knot panes without treating personal sync as publication.
 
-**Files:** a focused `ports/knot/examples/knot_publish_peer.rs` receipt runner
+**Files:** a focused `ports/knot/examples/knot_publish_peer.rs` *(historical citation)* <!-- doc-audit: historical-path --> receipt runner
 first; the resident Mere/Turnstone host when product exposure is chosen.
 
 The receipt runner creates distinct holder and reader seeds, has the holder
@@ -523,7 +523,7 @@ Once its entry conditions hold, Phase B proceeds in this order:
    catalog visibility, version identity, digest algorithm, cache rules,
    refusal privacy, revocation semantics, and inert document handling.
 4. Extract `knot-protocol` only for the specified codec and conformance
-   vectors. `ports/knot` adapts its causal store to it; the crate does not
+   vectors. `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> adapts its causal store to it; the crate does not
    absorb the store.
 5. Obtain a second implementation against the vectors and correct every
    ambiguity it exposes before promising compatibility.

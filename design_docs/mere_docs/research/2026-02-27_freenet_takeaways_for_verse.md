@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/research/2026-02-27_freenet_takeaways_for_verse.md`
+> - Original path: `design_docs/verse_docs/research/2026-02-27_freenet_takeaways_for_verse.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `04d68365`
 >
 > None of it was ever built. It is filed here as research, not as a plan and

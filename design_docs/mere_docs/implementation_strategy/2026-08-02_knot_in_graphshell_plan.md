@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 **Date:** 2026-08-02
 **Status:** K0-K3 complete. K1 chose Option A (Mark): shared documents are
@@ -19,7 +19,7 @@ by the [device resident consolidation plan](2026-08-20_device_resident_consolida
 one logical resident owns personal Knot authoring, sync, and content, while
 Turnstone and standalone Knot consume or embed that resident.
 
-**Physical receipt (2026-08-08):** `ports/knot/examples/k2_peer.rs` held a real
+**Physical receipt (2026-08-08):** `ports/knot/examples/k2_peer.rs` *(historical citation)* <!-- doc-audit: historical-path --> held a real
 vault on Q-PC and visited it from Windows over an explicit endpoint ticket.
 The visitor was admitted, mounted `Knot`, saved, heard the unseen revision,
 remained live, read back exactly what it wrote from Q-PC's file, closed, and
@@ -50,7 +50,7 @@ converges with — see "Why these are one move".
 
 ## The finding
 
-`ports/knot/src/endpoint.rs` opens with "Graphshell disclosure for Knot
+`ports/knot/src/endpoint.rs` *(historical citation)* <!-- doc-audit: historical-path --> opens with "Graphshell disclosure for Knot
 directory state" and `KnotEndpoint` implements `ProjectionSource`,
 `ResumableProjectionSource`, and `IntentSink`. **Knot is already a graphshell
 endpoint.** It has been one for as long as that file has existed.
@@ -76,7 +76,7 @@ host half changes shape.
 | `vault.rs`, `writer.rs`, `watcher.rs` | 956 | Domain. Unchanged. |
 | `directory.rs`, `search.rs`, `settings.rs`, `startup.rs`, `content_classes.rs` | ~1100 | Domain. Unchanged. |
 
-`ports/knot` keeps its bin and stays runnable alone. A port being a thin shell
+`ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> keeps its bin and stays runnable alone. A port being a thin shell
 over an embeddable adapter is the intended shape, not a compromise.
 
 ## Why these are one move with the carrier plan
@@ -294,7 +294,7 @@ overwrites the first. The guarantee belongs to the client, and the doc comment
 should say so rather than claiming the responder provides it.
 
 **K2 IS DONE 2026-08-06.** All three clauses of the revised done condition
-are proven in `ports/knot/tests/place_projection.rs`, against the real
+are proven in `ports/knot/tests/place_projection.rs` *(historical citation)* <!-- doc-audit: historical-path -->, against the real
 `ResidentProjectionHost` and its catalog rather than a hand-rolled stand-in.
 Two peers with distinct subjects and distinct grants are admitted over a
 transport and each mounts a real `KnotEndpoint` over one holder's directory.
@@ -332,7 +332,7 @@ nothing enables, so nothing else is dragged along today.
 `BlockEvaluator: Send` is now stated in genet, where the constraint belongs: a
 thread-hostile language runtime should say so by not implementing the trait,
 rather than leaving every endpoint above it unschedulable for reasons invisible
-from there. `ports/knot/tests/send_probe.rs` asserts the result, so breaking any
+from there. `ports/knot/tests/send_probe.rs` *(historical citation)* <!-- doc-audit: historical-path --> asserts the result, so breaking any
 link in that two-repo chain names the type that changed instead of surfacing as
 a confusing trait error at a registration in another crate.
 
@@ -368,7 +368,7 @@ exist:
   carrier's accidental second job, and C3 took it back. A remote endpoint is
   now reached by dialling it.
 - **It still has live consumers**, which is what distinguishes a decision from
-  attrition: `ports/knot/tests/revision_bell.rs` drives a real endpoint
+  attrition: `ports/knot/tests/revision_bell.rs` *(historical citation)* <!-- doc-audit: historical-path --> drives a real endpoint
   process, and the G4 receipt harness in `ports/graphshell/src/sessions.rs`
   mounts endpoint programs through `spawn_endpoint_session`.
 
@@ -435,7 +435,7 @@ file-in-place from a vault document rather than collapsing them.
 own index type? Generalising is the better instinct if the schemas are close;
 it is worse if it contorts the trail index to serve a second shape. Read both
 schemas before choosing, and put the answer wherever it lands **in
-`eidetic-search`, not in `ports/knot`** — search machinery belongs in the
+`eidetic-search`, not in `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->** — search machinery belongs in the
 search crate. Note that doing so widens that crate's stated charter beyond
 "eidetic browsing memory", which is a rename or a charter edit, not a silent
 drift.

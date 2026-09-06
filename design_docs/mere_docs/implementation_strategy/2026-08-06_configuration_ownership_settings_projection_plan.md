@@ -6,11 +6,11 @@
 provider contract, and the mere-local work. Sibling products (Woodshed, Hocket,
 Isometry, Cleromancy) do their own splits under their own design_docs plans;
 this plan holds pointers, not their work.
-**Code**: `genet/components/genet-host-api/tile.rs` (the `SettingsRef` lane,
+**Code**: `genet/components/genet-host-api/tile.rs` *(historical citation)* <!-- doc-audit: historical-path --> (the `SettingsRef` lane,
 tile.rs:144), `genet/components/config` (opts/prefs),
 `mere/crates/system/session-runtime/src/{application_settings_store.rs,device_settings_store.rs,settings_store.rs}` +
 `persona_settings_store.rs`, `knot-editor/crates/knot-editor/src/settings.rs`,
-`mere/ports/graphshell/src/native/owner_settings.rs`,
+`mere/ports/graphshell/src/native/owner_settings.rs` *(historical citation)* <!-- doc-audit: historical-path -->,
 `turnstone/src/{apparatus_pane.rs,settings_provider.rs,settings_pane.rs}`,
 `woodshed/crates/woodshed-core/src/{settings.rs,storage.rs}`,
 `woodshed/crates/woodshed-views/src/{settings_provider.rs,stage/settings.rs}`,

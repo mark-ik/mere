@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/research/2026-02-23_storage_economy_and_indices.md`
+> - Original path: `design_docs/verse_docs/research/2026-02-23_storage_economy_and_indices.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `1208e352`
 >
 > None of it was ever built. It is filed here as research, not as a plan and

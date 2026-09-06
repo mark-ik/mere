@@ -140,7 +140,7 @@ sheet). Pure views-layer sugar crate, zero engine changes.
    pointer-wrap-around-leaf pattern, and GraphGlyph draws inside a native
    button.~~ **Landed 2026-07-09.** The leaves themselves already existed in
    `chisel::glyphs`; this closed the three done-conditions:
-   - *renders via `_with_leaves`*: `ports/pelt-desktop/smoke_chisel.rs` paints all
+- *renders via `_with_leaves`*: `ports/pelt-desktop/smoke_chisel.rs` *(historical citation)* <!-- doc-audit: historical-path --> paints all
      three through `scene_from_session_dom_with_leaves`.
    - *Knob proves pointer-wrap-around-leaf*: `on_pointer(chisel_leaf(..))` drives
      `Knob::set_value` from the view layer; the leaf implements no `Leaf::event`.

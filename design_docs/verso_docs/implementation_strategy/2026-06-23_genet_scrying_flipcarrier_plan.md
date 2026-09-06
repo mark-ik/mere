@@ -2,7 +2,7 @@
 
 > **Consolidation note, 2026-09-02.** The crates this document names —
 > `verso`, `verso-api`, `verso-scry`, `verso-genet` — were consolidated into
-> the single `components/verso-tile` crate on 2026-07-09 (its `api`, `flip`
+> the single `components/verso-tile` *(historical citation)* <!-- doc-audit: historical-path --> crate on 2026-07-09 (its `api`, `flip`
 > and `scry` modules, plus the `genet-donor` feature). The paths below are
 > as of writing; the design they record is unchanged.
 **Date**: 2026-06-23
@@ -206,7 +206,7 @@ same page, same session, same place — never the same running program.
   `NavigationFinished`. Designed the flip-back re-root path + `BackState`.
 - **2026-06-23 (impl)**: corrected the status — *both* charter prerequisites shipped
   2026-06-15 (P4's X1+ scry tile, and the inker picker's `engine_pins` routing), so
-  the live flip is unblocked, not picker-gated. Minted `crates/verso-api`
+  the live flip is unblocked, not picker-gated. Minted `crates/verso-api` *(historical citation)* <!-- doc-audit: historical-path -->
   — `PortableViewState`/`BackState`/`LayerSet` + `FlipDonor`/`FlipBack`/`FlipReceiver`,
   engine-agnostic with zero deps; `cargo test -p verso-api` green.
 - **2026-06-23 (phase 1)**: genet-side donor DOM extraction landed and tested —
@@ -214,7 +214,7 @@ same page, same session, same place — never the same running program.
   escaping; genet-scripted-dom `fdac70f2b10`) and `form_values` keyed by name/id
   (`3a35b5cc4aa`). The remaining phase-1 url/scroll are host-side and belong with the
   `verso-genet` adapter.
-- **2026-06-23 (phase 3, donor)**: minted `crates/verso-genet` — `GenetDonor`, the
+- **2026-06-23 (phase 3, donor)**: minted `crates/verso-genet` *(historical citation)* <!-- doc-audit: historical-path --> — `GenetDonor`, the
   genet `FlipDonor`. Fills the FORM + DOM layers itself from the scripted DOM
   (`form_values` / `outer_html` over `LayoutDom::document`) and takes the NAV
   (url+scroll), SESSION (cookies), and VISUAL (frame) layers host-fed via `with_*`
@@ -222,7 +222,7 @@ same page, same session, same place — never the same running program.
   so the crate depends only on `genet-scripted-dom` + `verso-api` (no runtime, no GPU
   layer). `donates()` advertises FORM|DOM always plus the fed host layers. 3 tests
   green.
-- **2026-06-23 (phase 4, carrier)**: minted `crates/verso` — the engine-agnostic
+- **2026-06-23 (phase 4, carrier)**: minted `crates/verso` *(historical citation)* <!-- doc-audit: historical-path --> — the engine-agnostic
   orchestrator (`verso-api` only, no engine). `flip_forward(donor, receiver)` masks
   the captured state to `donates() ∩ receives()` and presents a `Carry::Forward`;
   `flip_back(source, primary)` masks the `BackState` to the primary's appetite and
@@ -235,7 +235,7 @@ same page, same session, same place — never the same running program.
   and the host frame loop) and the meerkat `ScryingHost` hook that fires the carrier on
   the `engine_pins` genet→`scrying.web` transition (§1, §6.5).
 - **2026-06-23 (phase 3+5, scry receiver + host wiring)**: the forward flip is live.
-  Minted `crates/verso-scry` — `ScryForward`, a two-phase forward-inject state machine
+  Minted `crates/verso-scry` *(historical citation)* <!-- doc-audit: historical-path --> — `ScryForward`, a two-phase forward-inject state machine
   (set cookies → navigate → restore scroll/forms on `Completed`) over a thin
   `ScrySurface` seam the host implements. **Refinement of §2**: rather than depend on
   the heavy Windows-only `scrying` crate, `verso-scry` stays `verso-api`-only and the

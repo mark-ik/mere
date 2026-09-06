@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-09
 **Status**: In progress.
-**Related**: [graph roster + frame taxonomy §4](../design/2026-06-07_graph_roster_and_frame_taxonomy.md#4-shellbar-2026-06-09), [frame tree plan](../../archive_docs/2026-06-09_completed_plans/2026-06-08_frame_tree_in_meerkat_plan.md), `crates/meerkat/`, `crates/system/pandect/src/settings_store.rs`
+**Related**: [graph roster + frame taxonomy §4](../design/2026-06-07_graph_roster_and_frame_taxonomy.md#4-shellbar-2026-06-09), [frame tree plan](../../archive_docs/2026-06-09_completed_plans/2026-06-08_frame_tree_in_meerkat_plan.md), `crates/meerkat/` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/system/pandect/src/settings_store.rs`
 
 Wire a docked chrome strip (the shellbar) that gives mouse users access to the
 pane toggles currently keybind-only. F1 (frame tree in meerkat) is complete;

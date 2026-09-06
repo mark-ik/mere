@@ -7,7 +7,7 @@ its open question 5.4, retargets 5.1, and answers "is mere still too
 browser-shaped?" with a concrete dissolution program. Companion to the
 [participant gate + packs plan](../implementation_strategy/2026-07-17_participant_gate_packs_plan.md)
 (whose facet/pack/gate machinery this doc leans on) and the
-[boundary pass plan](../implementation_strategy/2026-07-09_mere_turnstone_boundary_pass_plan.md)
+[boundary pass plan](../implementation_strategy/2026-07-09_mere_turnstone_boundary_pass_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->
 (whose slice C invented the sidecar pattern this doc generalizes).
 
 **2026-07-22 boundary amendment:** Conatus has since landed as the family repo
@@ -71,7 +71,7 @@ what remains is Container.
   codicil, chartulary, scholia), Conatus (numen, quint, seiche), personae,
   armillary, and servitor. Promotion gate stays consumer-pull with the sanity
   check.
-- **Spatial/arrangement:** the extraction landed in `repos/conatus` on
+- **Spatial/arrangement:** the extraction landed in `repos/conatus` *(historical citation)* <!-- doc-audit: historical-path --> on
   2026-07-21: numen defines fields, quint evaluates them, and seiche integrates
   them into dynamic layout. `Node.position/velocity` still retire onto the
   cartography-geometry sidecar and seiche state. Position is an arrangement

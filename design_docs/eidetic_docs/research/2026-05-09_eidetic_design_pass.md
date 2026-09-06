@@ -8,11 +8,11 @@
 
 **Inheritance and prior context**:
 
-- `repos/graphshell/design_docs/verse_docs/implementation_strategy/2026-02-26_intelligence_memory_architecture_stm_ltm_engrams_plan.md` — STM/LTM/EngramMemory/Ectoplasm vocabulary; **valid, adopt selectively for vocabulary**
-- `repos/graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md` (1100+ lines) — canonical engram spec; **example schema vocabulary going forward** (memory-kind enum reframed as open schema references — see §3 carry-forward / §7.4)
-- `repos/graphshell/design_docs/graphshell_docs/implementation_strategy/aspect_distillery/distillation_request_and_artifact_contract_spec.md` — typed artifact classes; **valid, eidetic typed-payload schema should align with this vocabulary**
-- `repos/mere/design_docs/mere_docs/research/2026-05-08_local_intelligence_integration_research.md` §5.5 / §5.6 / §8 — model-as-engram framing, schema-typed engrams; **proximal pull for this design pass**
-- `repos/mere/crates/eidetic/src/lib.rs` — current 186-line implementation
+- `repos/graphshell/design_docs/verse_docs/implementation_strategy/2026-02-26_intelligence_memory_architecture_stm_ltm_engrams_plan.md` *(historical citation)* <!-- doc-audit: historical-path --> — STM/LTM/EngramMemory/Ectoplasm vocabulary; **valid, adopt selectively for vocabulary**
+- `repos/graphshell/design_docs/verse_docs/implementation_strategy/engram_spec.md` *(historical citation)* <!-- doc-audit: historical-path --> (1100+ lines) — canonical engram spec; **example schema vocabulary going forward** (memory-kind enum reframed as open schema references — see §3 carry-forward / §7.4)
+- `repos/graphshell/design_docs/graphshell_docs/implementation_strategy/aspect_distillery/distillation_request_and_artifact_contract_spec.md` *(historical citation)* <!-- doc-audit: historical-path --> — typed artifact classes; **valid, eidetic typed-payload schema should align with this vocabulary**
+- `repos/mere/crates/eidetic/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path --> — current 186-line implementation
+- `repos/mere/crates/eidetic/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path --> — current 186-line implementation
 - TERMINOLOGY.md memory: *eidetic* = "private local accumulated browsing memory; the substrate engrams are distilled from"
 
 ---

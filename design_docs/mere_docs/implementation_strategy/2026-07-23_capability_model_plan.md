@@ -14,7 +14,7 @@ what the B3 implementation pass exposed.
 
 Servitor now lives at `crates/servitor` as a mere workspace member: the phase-C3c
 move of the [repo consolidation plan](2026-07-23_repo_consolidation_plan.md) has
-landed and `repos/servitor` is gone. (Corrected 2026-08-16; the founding text
+landed and `repos/servitor` *(historical citation)* <!-- doc-audit: historical-path --> is gone. (Corrected 2026-08-16; the founding text
 here said it was still standalone and that this work would travel with the move.)
 
 ## The decision in one line

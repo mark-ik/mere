@@ -1,13 +1,13 @@
 # Platform Boundary and Repository Topology Plan
 
 **Date:** 2026-09-02  
-**Status:** **P0-P6 landed 2026-09-02 through 2026-09-05.** Woodshed's P4
-exception closed 2026-09-04 with single-source, software, and headed receipts.
-P6's public topology and hosted Pages receipt closed 2026-09-05; the follow-up
-domain verification, certificate issuance, and HTTPS enforcement are also
-complete. P7 remains open behind the documentation-policy D3
-historical-disposition gate. Vello
-V1-V4 are owned separately by Netrender's durable upstream-ask note.
+**Status:** **Complete 2026-09-06; P0-P7 landed.** Woodshed's P4 exception
+closed 2026-09-04 with single-source, software, and headed receipts. P6's
+public topology, hosted Pages, domain verification, certificate issuance, and
+HTTPS enforcement closed 2026-09-05. P7 closed 2026-09-06 when the
+documentation-policy D3 audit reached zero failing structural, link, path, and
+annotation findings. Vello V1-V4 are owned separately by Netrender's durable
+upstream-ask note.
 **Authority:** this is the canonical plan for the Genet/Mere boundary and the
 follow-on repository-topology review. Mer3ly continues to own the public
 repository manifest and transfer receipts.  
@@ -434,7 +434,7 @@ embedded surfaces share one document model, 2026-09-04:** that clause was the
 knot-editor extraction plan's E-series work, listed in this plan's own
 prerequisites table, and its E2 closed it. `knot-editor` and `knot-document`
 are no longer mere members; the standalone process is the knot-editor
-repository's `apps/desktop`, and Djinn, Turnstone and that process all resolve
+repository's `apps/desktop` *(historical citation)* <!-- doc-audit: historical-path -->, and Djinn, Turnstone and that process all resolve
 the same `knot-document` from knot-editor
 `fcd004b655b595038eba0a7e49f209b8477edadf`, so no graph in the family carries
 two of it. `knot-editor-host` stayed, as inker-family integration code, and
@@ -809,7 +809,7 @@ turnstone and woodshed at `da8762fd`, hocket and isometry on `branch = main`
 at different heads, isometry still resolving 0.1.0, cleromancy through a
 machine-local path patch recorded in its committed lock), so P4's
 source-identity audit wants a baseline before the split, not only after.
-Docs: `genet/design_docs/inker_docs` holds one file, the engine-picker plan,
+Docs: `genet/design_docs/inker_docs` *(historical citation)* <!-- doc-audit: historical-path --> holds one file, the engine-picker plan,
 which is controller material already citing four Mere documents; it travels,
 leaving a page-capture-contract note behind, and genet's `DOC_POLICY.md`
 claim that its three area roots mirror `components/{inker,nematic,verso-tile}`
@@ -986,7 +986,7 @@ crates; the scene family moves from `crates/scenograph/` to
 `crates/cambium/workbench`; `mere-surface-api` and `mere-document-lanes` to
 `crates/system/` beside `fetch`, since they are host contracts and content
 lanes rather than widgets; Pelt to `ports/pelt`, knot-editor-host to
-`crates/cambium/knot-editor-host` or beside Knot's port. The `scenograph`
+`crates/cambium/knot-editor-host` *(historical citation)* <!-- doc-audit: historical-path --> or beside Knot's port. The `scenograph`
 facade (36 lines of re-exports plus a 528-line solver registry) has one
 in-mere consumer, the `webrtc-join` probe, and that consumer already takes
 `sceno` directly; the registry moves into `scenomise` or a `cambium-scenes`
@@ -1068,7 +1068,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   genet-host-api, **`document-session-api`** for inker's contract crate.
   Claims follow with a real publish when each crate is ready.
 - **genet-host-api split landed** in genet `57bcc38fdae`: settings and surface
-  moved with history into `components/mere-surface-api` (depends on
+  moved with history into `components/mere-surface-api` *(historical citation)* <!-- doc-audit: historical-path --> (depends on
   workbench alone); the raw half keeps the name at 0.2.0 with no
   in-workspace dependency; six in-genet import sites repointed and cambium
   no longer depends on genet-host-api; the cone witness holds both cones.
@@ -1089,7 +1089,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   Next and last in P1: `genet-documents`.
 - **genet-documents split landed** in genet `76a47850946`, and with it **P1 is
   complete**. The reader and smolweb lanes, their session engine and the
-  remote fetch bridge moved with history into `components/mere-document-lanes`
+  remote fetch bridge moved with history into `components/mere-document-lanes` *(historical citation)* <!-- doc-audit: historical-path -->
   (Mark's name, checked free on the sparse index; reader unconditional,
   `smolweb` and `netfetch` its features). genet-documents keeps the Livery
   and Scripted lanes and links no controller, content lane or transport,
@@ -1116,7 +1116,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
 - **mere repointed to genet head after P1** (mere `487e18a478c`). Every
   genet.git pin moved from `eff0cb6df48`, the revision §9.4 recorded as mere's
-  single source identity, to `388d89c3a64`; `ports/knot/desktop` was two
+  single source identity, to `388d89c3a64`; `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> was two
   revisions further behind at `da8762fd910` and joins the rest. Thirty-nine pin
   lines across three manifests at one revision, witnessed by grep and by
   `cargo metadata` resolving 31 genet-derived packages there and nowhere else.
@@ -1160,9 +1160,9 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   behind head and older than all four P1 commits, so a build there would mix a
   pre-P1 cambium with head-pinned workbench, taffy and parley. Refreshing that
   worktree belongs to the lane that owns it, not to this change; its ten pins
-  are repointed and its proof is deferred. **`ports/knot/desktop`** cannot be
+  are repointed and its proof is deferred. **`ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path -->** cannot be
   built standalone at all, for two pre-existing faults this repoint found and
-  deliberately did not fix: it is nested inside the member `ports/knot` yet
+  deliberately did not fix: it is nested inside the member `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> yet
   carries no empty `[workspace]` table, so the root's `exclude` entry cannot
   reach it and even `--manifest-path` refuses, contradicting the exclude
   comment's claim that it stays buildable that way; and given such a table it
@@ -1175,7 +1175,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 - 2026-09-03: **ortet founded in genet** (`9b32f3defe7` O0, `f41d5bfa2b2`
   O1; plan `genet/design_docs/2026-09-03_ortet_founding_plan.md`). This
   answers §9.3 ruling 4 the second way: a smaller host takes the raw-host role
-  rather than Pelt shedding its lanes. `ports/ortet` is one binary over
+  rather than Pelt shedding its lanes. `ports/ortet` *(historical citation)* <!-- doc-audit: historical-path --> is one binary over
   `genet-winit-host`, `genet-render-host`, `genet-documents`' Livery lane,
   `document-session-api`, `genet-host-api` and `netfetcher`; it drives the
   session itself, has no chrome, and its receipts are self-driven (`--frames`,
@@ -1203,8 +1203,8 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   |---|---|---|
   | `ports/pelt` | `pelt`, `pelt-core`, `pelt-desktop` | none outside Pelt itself |
   | `ports/tabard` | `tabard` | **none at all** |
-  | `components/inker/knot-editor-host` | `knot-editor-host` | none |
-  | `components/mere-document-lanes` | `mere-document-lanes` | `pelt`, `pelt-desktop` only |
+  | `components/inker/knot-editor-host` *(historical citation)* <!-- doc-audit: historical-path --> | `knot-editor-host` | none |
+  | `components/mere-document-lanes` *(historical citation)* <!-- doc-audit: historical-path --> | `mere-document-lanes` | `pelt`, `pelt-desktop` only |
 
   Each claim was checked with `cargo tree -i <crate> --workspace` before
   anything was removed, and one expectation was wrong in the safe direction:
@@ -1218,12 +1218,12 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   transfer.** All four `git subtree split -P <path> -b split/<name>` runs were
   started first, given more than the fifteen-minute budget, and produced
   nothing; they were stopped and no `split/*` ref exists. The reason is
-  specific and checkable: `components/cambium` carries a `git subtree add`
+  specific and checkable: `components/cambium` *(historical citation)* <!-- doc-audit: historical-path --> carries a `git subtree add`
   join commit (`6e37c2c41e7`, "Add 'components/cambium/' from commit
   a2a25b78f74"), and `find_existing_splits` uses that join to bound the walk,
   which is why the probe reported 738 commits in 275 s. These four paths were
   never subtree-added — `git log --grep=git-subtree-dir` over genet returns
-  exactly three commits, for `components/netfetcher`, `components/cambium` and
+  exactly three commits, for `components/netfetcher`, `components/cambium` *(historical citation)* <!-- doc-audit: historical-path --> and
   the 2013-era `src/components/script/style/` — so git-subtree walks the whole
   58,242-commit history in shell, twice (once to count `revmax`, once to
   process). Measured rate on this machine, from the split cache's `notree`
@@ -1247,7 +1247,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   **Genet after the removal.** `default-members = ["ports/ortet"]`, and
   `assert_ports_depend_inward` asserts ortet's single manifest at
-  `ports/ortet/Cargo.toml` where it asserted Pelt's two (ortet plan O4). The
+  `ports/ortet/Cargo.toml` *(historical citation)* <!-- doc-audit: historical-path --> where it asserted Pelt's two (ortet plan O4). The
   cone witness's positive control had to be rebuilt: `pelt-desktop`'s cone
   exercised an exact forbidden name (`inker`) and the `cambium`/`mere-`
   prefixes in one walk, and no remaining member reaches both — `cargo tree -p
@@ -1268,9 +1268,9 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   Files changed outside the four directories: genet's root `Cargo.toml` (six
   workspace entries and the `default-members` line), `support/ci/check_depen`
   `dency_cones.py`, `README.md` (the default member and its run examples),
-  `ports/ortet/README.md`, `components/netfetcher/README.md`,
+  `ports/ortet/README.md` *(historical citation)* <!-- doc-audit: historical-path -->, `components/netfetcher/README.md`,
   `components/genet-documents/README.md` and
-  `design_docs/2026-09-03_ortet_founding_plan.md`. Prose in
+  `design_docs/2026-09-03_ortet_founding_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->. Prose in
   `components/cambium/cambium/src/{frisket,field,tests}.rs` and in genet's
   `docs/` still names `pelt-desktop` and `ports/pelt`; that is history and
   another lane's tree, and it was left alone.
@@ -1294,13 +1294,13 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   |---|---|---|---|
   | `ports/pelt` | `pelt`, `pelt-core`, `pelt-desktop` | 113 | `f76f8a4edee` |
   | `ports/tabard` | `tabard` | 6 | `7dcb8836bbd` |
-  | `ports/knot/editor-host` | `knot-editor-host` | 10 | `5b5dd8298f5` |
+  | `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path --> | `knot-editor-host` | 10 | `5b5dd8298f5` |
   | `crates/system/document-lanes` | `mere-document-lanes` | 2 | `156319ea3ae` |
 
-  `ports/knot/editor-host` is nested inside the member `ports/knot`, which
+  `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path --> is nested inside the member `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->, which
   needed no `exclude` change: cargo auto-excludes a subdirectory carrying its
   own `Cargo.toml` from the parent package, and `exclude` names only
-  `ports/knot/desktop`, a different path.
+  `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path -->, a different path.
 
   **One revision, and the pins that had to be invented.** Every genet.git pin
   in the tree moved from `388d89c3a64` to `b78e2b92251`, genet's head after the
@@ -1329,11 +1329,11 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   **Two findings the landing exposed, both latent before it.**
 
-  1. `ports/knot` uses `nematic::HtmlFragmentEngine` while mere's workspace pin
+  1. `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> uses `nematic::HtmlFragmentEngine` while mere's workspace pin
      is `default-features = false`. That compiled only because
      `knot-editor-host` resolved from genet.git and pulled nematic's defaults
      in through *genet's* workspace table. As a member it cannot, so
-     `ports/knot` now names `features = ["html-fragment"]` where it uses it.
+     `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> now names `features = ["html-fragment"]` where it uses it.
   2. Two `pelt-desktop` tests failed on a missing image, and the `article`
      receipt would have rendered a different frame. Pelt's fixtures reference
      `resources/servo_64.png` and `resources/servo_1024.png` by
@@ -1389,7 +1389,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   genet's 2026-08-25 `973595d7fbd90151`; that older figure belongs to an
   earlier fixture state, not to the repository move.
 
-  **Still open.** `ports/graphshell/web` and `ports/knot/desktop` had their ten
+  **Still open.** `ports/graphshell/web` and `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> had their ten
   and three pins repointed and remain unproven for the same two pre-existing
   reasons the 2026-09-03 repoint recorded; nothing here changed either. The
   Circuit recipe's `workspace_graph.json` fixture is now one generation behind
@@ -1431,11 +1431,11 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   Exhibit A**, 0 Exhibit B hits, and the ledger path resolves to the new
   directory.
 
-  **2. `ports/knot/desktop` builds standalone** (`020c0449`). Both pre-existing
+  **2. `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> builds standalone** (`020c0449`). Both pre-existing
   faults are fixed as the 2026-09-03 repoint described them. It has an empty
   `[workspace]` table, which is what actually keeps it out of the workspace —
   the root `exclude` entry never could, because the path sits inside the member
-  `ports/knot`. Given the table it restates the two `[patch.crates-io]` entries
+  `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->. Given the table it restates the two `[patch.crates-io]` entries
   its graph needs, `taffy` (as `genet-taffy`) and `parley`, at the same genet
   revision the root names and with the root's own reasons; without them
   `genet-livery` resolved published parley 0.10.0 and failed on
@@ -1524,7 +1524,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   solver registry behind `sceno::Arrangement::Custom`, moves into
   `scenomise`, which already owns the families and the solve path. The
   published `scenograph 0.0.4` name stays held for the editor. Cambium's own
-  documents (`components/cambium/docs/`, with its history and receipts)
+  documents (`components/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path -->, with its history and receipts)
   travel inside the exported tree; the two live plans in genet's
   `design_docs/` (`2026-08-31_workbench_component_plan.md`,
   `2026-09-03_host_ui_zoom_plan.md`) and their index entries move to mere's
@@ -1545,9 +1545,9 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   | path | packages | genet dependents at removal |
   |---|---|---|
-  | `components/cambium` | `cambium`, `cambium-rootstock`, `cambium-winit`, `cambium-winit-a11y`, `cambium-genet-winit-host`, `cambium-genet-web-host`, `cambium-nematic`, `meristem`, `sprigging` | none outside the cluster |
-  | `components/workbench` | `workbench` | `cambium`, `mere-surface-api` only |
-  | `components/mere-surface-api` | `mere-surface-api` | `cambium` only |
+  | `components/cambium` *(historical citation)* <!-- doc-audit: historical-path --> | `cambium`, `cambium-rootstock`, `cambium-winit`, `cambium-winit-a11y`, `cambium-genet-winit-host`, `cambium-genet-web-host`, `cambium-nematic`, `meristem`, `sprigging` | none outside the cluster |
+  | `components/workbench` *(historical citation)* <!-- doc-audit: historical-path --> | `workbench` | `cambium`, `mere-surface-api` only |
+  | `components/mere-surface-api` *(historical citation)* <!-- doc-audit: historical-path --> | `mere-surface-api` | `cambium` only |
 
   Every claim was checked with `cargo tree -i <crate> --workspace --prefix
   none` before anything was removed, and `--target all` for the four whose
@@ -1570,9 +1570,9 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   | genet path | landing prefix | bare repo | commits | elapsed |
   |---|---|---|---|---|
-  | `components/cambium` | `crates/cambium` | `cambium-history.git` | 91 | 1 s |
-  | `components/workbench` | `crates/cambium/workbench` | `workbench-history.git` | 1 | 2 s |
-  | `components/mere-surface-api` | `crates/system/surface-api` | `surface-api-history.git` | 1 | 1 s |
+  | `components/cambium` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/cambium` | `cambium-history.git` | 91 | 1 s |
+  | `components/workbench` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/cambium/workbench` | `workbench-history.git` | 1 | 2 s |
+  | `components/mere-surface-api` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/system/surface-api` | `surface-api-history.git` | 1 | 1 s |
 
   Each was verified by tree identity, not by inspection: `git --git-dir=<bare>
   rev-parse refs/heads/main:<landing prefix>` equals `git rev-parse
@@ -1600,7 +1600,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `<scratch>/cambium-docs/` for mere; `DOC_README.md` keeps a one-line note
   under its "cambium" heading saying where they went, and its now-empty
   "workspace composition" heading was dropped with the Workbench entry.
-  Cambium's own `components/cambium/docs/` travelled inside the exported tree.
+  Cambium's own `components/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path --> travelled inside the exported tree.
   `docs/2026-08-09_cambium_desktop_host_g1_receipt.md` **stays in genet** —
   `genet-livery`'s `src/lib.rs` and `tests/deep_nesting.rs` still cite it —
   but the moving zoom plan cites it too, so a copy is in the scratch folder
@@ -1711,7 +1711,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   **The scene family moved under the umbrella and the facade dissolved**
   (`3e4d5098`). `sceno`, `scenomise` and `scenotime` went from
   `crates/scenograph/` to `crates/cambium/scenes/`, keeping their names and
-  versions; `crates/scenograph/README.md` came with them, corrected — its
+  versions; `crates/scenograph/README.md` *(historical citation)* <!-- doc-audit: historical-path --> came with them, corrected — its
   four-crate table is three, and its dual Apache/MIT license section, inherited
   from the standalone repository and already stale (mere has no
   `LICENSE-APACHE` or `LICENSE-MIT`, and every source in the three crates
@@ -1739,7 +1739,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   there were 106 — eleven in, the facade out. Every git pin of one of the
   eleven became a workspace path, in the root manifest and in the two
   standalone ports that name them directly (`ports/graphshell/web` for
-  `cambium`, `ports/knot/desktop` for `cambium-genet-winit-host`). Seven patch
+  `cambium`, `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> for `cambium-genet-winit-host`). Seven patch
   entries left `.cargo/config.toml.example` and both live gitignored twins
   identically — `cambium`, `sprigging`, `workbench`, `mere-surface-api` and
   `cambium-genet-winit-host` from the genet table, `cambium` and `sprigging`
@@ -1778,7 +1778,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   **The four receipt harnesses came too**, closing the second:
   `wayland-frame-receipt.ps1`, `windows-maximized-receipt.ps1`,
   `windows-snap-receipt.ps1` and `x11-shadow-receipt.ps1` are in mere's
-  `scripts/`, with their scenario paths corrected from `components/cambium/...`
+  `scripts/`, with their scenario paths corrected from `components/cambium/...` *(historical citation)* <!-- doc-audit: historical-path -->
   to `crates/cambium/...` (each `.scn` verified present) and their default
   output directory from `testing\genet\` to `testing\mere\`. Their
   `$repoRoot` / `$codeRoot` derivation needed nothing: `scripts/` sits at the
@@ -1792,10 +1792,10 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   composition, which is what `mere_docs/` holds; **open for Mark:** whether the
   Cambium family should instead have an area root of its own, which the policy
   would allow and two documents do not obviously earn. **Ruled 2026-09-03,
-  later the same day:** yes — `crates/cambium/docs/` was independently found to
+  later the same day:** yes — `crates/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path --> was independently found to
   be exactly the member-crate scatter §4 forbids, so the question was no longer
   "do two documents earn a root" but "does an already-scattered third source
-  join them under one." Both plans and every `crates/cambium/docs/` file moved
+  join them under one." Both plans and every `crates/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path --> file moved
   by `git mv` into the new `design_docs/cambium_docs/` (`implementation_strategy/`,
   `technical_architecture/`, `testing/`); see `DOC_README.md`'s
   `cambium_docs/` section and `DOC_POLICY.md`'s area-root list. The zoom plan's link to
@@ -1804,7 +1804,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `genet/docs/...`; its `mere/design_docs/...` citation of the configuration
   ownership plan became a relative link, now that the plan is a neighbour.
   Each got a **Home** note saying where it came from and that `components/...`
-  paths in its body are genet's. Cambium's own `crates/cambium/docs/`
+  paths in its body are genet's. Cambium's own `crates/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path -->
   travelled inside the exported tree and its links were checked: only
   `local-genet-development.md` was wrong, and badly — it described resolving
   genet from crates.io through a per-crate patch file, a posture two moves out
@@ -1923,14 +1923,14 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   | path | packages | genet dependents at removal |
   |---|---|---|
-  | `components/inker` | `inker` | `document-canvas`, `nematic`, and the three engine adapters only |
-  | `components/inker/document-canvas` | `document-canvas` | none |
+  | `components/inker` *(historical citation)* <!-- doc-audit: historical-path --> | `inker` | `document-canvas`, `nematic`, and the three engine adapters only |
+  | `components/inker/document-canvas` *(historical citation)* <!-- doc-audit: historical-path --> | `document-canvas` | none |
   | `components/inker/engines/{scrying,graft,weld}-engine` | `scrying-engine`, `graft-engine`, `weld-engine` | none |
-  | `components/verso-tile` | `verso-tile` | **none at all** |
-  | `components/nematic` | `nematic` | none |
-  | `components/illume` | `illume` | **none at all** |
-  | `components/errand` | `errand` | `nematic` only |
-  | `components/tinct` | `tinct` | **none at all** |
+  | `components/verso-tile` *(historical citation)* <!-- doc-audit: historical-path --> | `verso-tile` | **none at all** |
+  | `components/nematic` *(historical citation)* <!-- doc-audit: historical-path --> | `nematic` | none |
+  | `components/illume` *(historical citation)* <!-- doc-audit: historical-path --> | `illume` | **none at all** |
+  | `components/errand` *(historical citation)* <!-- doc-audit: historical-path --> | `errand` | `nematic` only |
+  | `components/tinct` *(historical citation)* <!-- doc-audit: historical-path --> | `tinct` | **none at all** |
   | `design_docs/{inker,nematic,verso}_docs` | — | — |
 
   Every claim was checked with `cargo tree -i <crate> --workspace --prefix
@@ -1962,12 +1962,12 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   | genet path | landing prefix | bare repo | commits | path lines | elapsed |
   |---|---|---|---|---|---|
-  | `components/inker` | `crates/inker/{inker,document-canvas,engines}` | `inker-history.git` | 52 | 356 | 0 s |
-  | `components/verso-tile` | `crates/inker/verso-tile` | `verso-tile-history.git` | 7 | 35 | 0 s |
-  | `components/nematic` | `crates/nematic/nematic` | `nematic-history.git` | 22 | 127 | 0 s |
-  | `components/illume` | `crates/nematic/illume` | `illume-history.git` | 7 | 34 | 0 s |
-  | `components/errand` | `crates/system/errand` | `errand-history.git` | 23 | 192 | 0 s |
-  | `components/tinct` | `crates/cambium/tinct` | `tinct-history.git` | 11 | 24 | 0 s |
+  | `components/inker` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/inker/{inker,document-canvas,engines}` | `inker-history.git` | 52 | 356 | 0 s |
+  | `components/verso-tile` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/inker/verso-tile` | `verso-tile-history.git` | 7 | 35 | 0 s |
+  | `components/nematic` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/nematic/nematic` | `nematic-history.git` | 22 | 127 | 0 s |
+  | `components/illume` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/nematic/illume` | `illume-history.git` | 7 | 34 | 0 s |
+  | `components/errand` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/system/errand` | `errand-history.git` | 23 | 192 | 0 s |
+  | `components/tinct` *(historical citation)* <!-- doc-audit: historical-path --> | `crates/cambium/tinct` | `tinct-history.git` | 11 | 24 | 0 s |
   | `design_docs/inker_docs` | (identical) | `inker-docs-history.git` | 2 | 2 | 0 s |
   | `design_docs/nematic_docs` | (identical) | `nematic-docs-history.git` | 4 | 13 | 0 s |
   | `design_docs/verso_docs` | (identical) | `verso-docs-history.git` | 2 | 4 | 1 s |
@@ -1984,23 +1984,23 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   **The inker export is one export with an ordered rewrite**, because the
   crate's own files and two nested member trees share a prefix:
-  `components/inker/document-canvas/` -> `crates/inker/document-canvas/`,
-  then `components/inker/engines/` -> `crates/inker/engines/`, then everything
-  else under `components/inker/` -> `crates/inker/inker/`. The two nested
+  `components/inker/document-canvas/` *(historical citation)* <!-- doc-audit: historical-path --> -> `crates/inker/document-canvas/`,
+  then `components/inker/engines/` *(historical citation)* <!-- doc-audit: historical-path --> -> `crates/inker/engines/`, then everything
+  else under `components/inker/` *(historical citation)* <!-- doc-audit: historical-path --> -> `crates/inker/inker/`. The two nested
   trees are verified by the tree hashes above. `crates/inker/inker` cannot be
-  compared that way — genet's `components/inker` tree *contains* the two
+  compared that way — genet's `components/inker` *(historical citation)* <!-- doc-audit: historical-path --> tree *contains* the two
   nested trees and the landed one does not — so it is verified at blob level
-  instead: genet's 18 `components/inker` entries outside the two subtrees
+  instead: genet's 18 `components/inker` *(historical citation)* <!-- doc-audit: historical-path --> entries outside the two subtrees
   match the landed 18 exactly, mode and blob sha, and the bare tip carries 44
   files, genet's count for the whole directory.
 
   **One wart in the inker history, recorded rather than repaired.**
-  `components/inker/knot-editor-host` left with Pelt earlier the same day, so
+  `components/inker/knot-editor-host` *(historical citation)* <!-- doc-audit: historical-path --> left with Pelt earlier the same day, so
   it is deleted at the export head but present in 32 historical path lines,
   and the ordered rewrite's catch-all rule lands those under
-  `crates/inker/inker/knot-editor-host/`. The tip tree is unaffected — zero
+  `crates/inker/inker/knot-editor-host/` *(historical citation)* <!-- doc-audit: historical-path -->. The tip tree is unaffected — zero
   such paths in it — and mere already holds that crate's own exported history
-  at `ports/knot/editor-host`, so this is duplicated ancestry in intermediate
+  at `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path -->, so this is duplicated ancestry in intermediate
   commits, not a wrong landing. **Open for Mark:** whether to leave it or
   re-export inker with a fourth rule that drops those lines.
 
@@ -2079,7 +2079,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   working in" corrected, since there is no longer one);
   `design_docs/DOC_POLICY.md` (the local addendum's area-root tree drops the
   three roots and gains `archive_docs/`, with the same note); and
-  `design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md`,
+  `design_docs/archive_docs/2026-09-02/2026-06-12_knot_evaluation_export_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->,
   whose three relative links into `nematic_docs/` would otherwise dangle and
   are now cross-repo path citations at `mere/design_docs/nematic_docs/...`.
   `Cargo.lock` is gitignored in genet, so there is no stale lock to sweep.
@@ -2089,7 +2089,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   not a path, and still the vocabulary inker's routing policy is written in);
   doc comments in `genet-documents` and `document-session-api` that name inker
   as the crate whose contract half they are; the archived export plan's table
-  row citing `components/inker/src/document/render/export.rs` as a historical
+  row citing `components/inker/src/document/render/export.rs` *(historical citation)* <!-- doc-audit: historical-path --> as a historical
   location; and genet's `docs/`, which this change did not touch. `.github`,
   `scripts` and `support` name none of the ten anywhere.
 
@@ -2156,10 +2156,10 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
   **The inker history's `knot-editor-host` residue is left as recorded.** The
   crate left with Pelt earlier the same day, so the ordered rewrite's catch-all
-  rule put 32 historical path lines under `crates/inker/inker/knot-editor-host/`.
+  rule put 32 historical path lines under `crates/inker/inker/knot-editor-host/` *(historical citation)* <!-- doc-audit: historical-path -->.
   The tip tree carries **zero** such paths, checked before the merge and after;
   seven intermediate commits do. Mere already holds that crate's own exported
-  history at `ports/knot/editor-host`, so this is duplicated ancestry in
+  history at `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path -->, so this is duplicated ancestry in
   intermediate commits, not a wrong landing, and re-exporting inker with a
   fourth rule to drop those lines remains **open for Mark**.
 
@@ -2344,7 +2344,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
      had never run against the html-fragment feature; genet's gates were
      `cargo check --workspace` and ortet's tests. **Open for Mark:** whether
      inker over-collects or the expectation is stale. Mere's own consumption is
-     unaffected, and `ports/knot`, which does name `html-fragment`, compiles
+     unaffected, and `ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->, which does name `html-fragment`, compiles
      and tests green.
   2. **The catalog receipt's line endings**, recorded above.
 
@@ -2361,21 +2361,21 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
 - 2026-09-03: **P3 assessment: Knot's reconciliation.** The facts, all
   measured today. Standalone `knot-editor` (repository, 525k lines with its
-  vendored tree, 25 editor sources) and mere's `ports/knot` are byte-identical
+  vendored tree, 25 editor sources) and mere's `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> are byte-identical
   in the editor crate and one file apart in `knot-document`; both last moved
-  on 2026-09-01 with the same commit subject. mere also holds `ports/knot/desktop`
-  (one file apart from the standalone `apps/desktop`) and, since Pelt's
-  landing, `ports/knot/editor-host` (the Cambium host, 420 lines). The
-  extraction plan in knot-editor (`design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`)
+  on 2026-09-01 with the same commit subject. mere also holds `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path -->
+  (one file apart from the standalone `apps/desktop` *(historical citation)* <!-- doc-audit: historical-path -->) and, since Pelt's
+  landing, `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path --> (the Cambium host, 420 lines). The
+  extraction plan in knot-editor (`design_docs/2026-09-01_knot_editor_repository_extraction_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->)
   rules the shape: Knot owns document, vault, evidence, sync and publishing;
   `knot-desktop` is the standalone process; mere and Turnstone may carry
   integration code only. Its gates are E1, Turnstone and Djinn consuming an
-  immutable knot-editor revision, and E2, removing `ports/knot` and
-  `ports/knot-document` from mere; its stop rule forbids deleting mere's copies
+  immutable knot-editor revision, and E2, removing `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> and
+  `ports/knot-document` *(historical citation)* <!-- doc-audit: historical-path --> from mere; its stop rule forbids deleting mere's copies
   before both consumers compile against a pushed revision. **The two PRs that
   carried E1 and E2 are stale.** turnstone #4 is CONFLICTING against its main;
   mere #5 is 337 commits behind, and a `git merge-tree` against today's main
-  conflicts in `Cargo.toml`, `ports/knot/Cargo.toml`, `ports/knot/desktop/Cargo.toml`
+  conflicts in `Cargo.toml`, `ports/knot/Cargo.toml` *(historical citation)* <!-- doc-audit: historical-path -->, `ports/knot/desktop/Cargo.toml` *(historical citation)* <!-- doc-audit: historical-path -->
   and both `knot-document` files, because today's moves rewrote exactly those
   manifests. They cannot be merged as they stand. There is a second reason
   they cannot: knot-editor pins `inker`, `nematic`, `illume`, `knot-editor-host`
@@ -2384,9 +2384,9 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   repoints knot-editor to one genet revision and one mere revision, with the
   moved crates from mere; (2) E1 is redone as fresh commits, Turnstone and
   Djinn pinning that knot-editor revision; (3) E2 is redone on today's main,
-  removing `ports/knot` and `ports/knot-document` and, per the ruled shape,
-  `ports/knot/desktop` too (the standalone process belongs to the standalone
-  repository, which already carries it as `apps/desktop`); `ports/knot/editor-host`
+  removing `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> and `ports/knot-document` *(historical citation)* <!-- doc-audit: historical-path --> and, per the ruled shape,
+  `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> too (the standalone process belongs to the standalone
+  repository, which already carries it as `apps/desktop` *(historical citation)* <!-- doc-audit: historical-path -->); `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path -->
   is integration code and stays in mere unless Mark rules it Knot's. The two
   open PRs are then closed with a note pointing at the fresh commits, which is
   Mark's action on GitHub. Nothing in this step touches code until (1) lands.
@@ -2431,7 +2431,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
 
 - 2026-09-03: **The Circuit workspace graph is generated, not committed.**
   Mark's ruling closes the staleness clause carried in the notes above. The
-  snapshot at `ports/distillery/tests/fixtures/circuit/workspace_graph.json`
+  snapshot at `ports/distillery/tests/fixtures/circuit/workspace_graph.json` *(historical citation)* <!-- doc-audit: historical-path -->
   fell a generation behind the member list every time a crate was added — it
   did so twice on 2026-09-03 alone, and by the end sat three generations back
   at `f75db463` while HEAD was `b57d2021`, naming 106 packages against the
@@ -2447,7 +2447,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   through the `CARGO` the test was launched with, writes the graph under
   `CARGO_TARGET_TMPDIR` (`target/tmp/circuit/workspace_graph.json`), and reads
   back what it wrote. `scripts/workspace_graph_fixture.py` is deleted; the
-  fixture is `git rm`ed and `ports/distillery/tests/fixtures/circuit/` is
+  fixture is `git rm`ed and `ports/distillery/tests/fixtures/circuit/` *(historical citation)* <!-- doc-audit: historical-path --> is
   gitignored. The `text eol=lf` attribute on `ports/distillery/tests/fixtures/**`
   stays: the two Chronicle boards under it are still authored and committed.
 
@@ -2466,17 +2466,17 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   not name `…`, so it is stale or empty". Nothing pushed.
 
 - 2026-09-04: **E2 landed — Knot's sources left this repository** (knot-editor
-  `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`). This is
+  `design_docs/2026-09-01_knot_editor_repository_extraction_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->). This is
   P3's Knot clause, the one the 2026-09-03 status left open, and it closes it.
-  `ports/knot` (the `knot-editor` crate, its docs, examples and tests) and
-  `ports/knot-document` are gone; `ports/knot/desktop` went with them because
+  `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> (the `knot-editor` crate, its docs, examples and tests) and
+  `ports/knot-document` *(historical citation)* <!-- doc-audit: historical-path --> are gone; `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> went with them because
   the standalone process belongs to the standalone repository, which carries it
-  as `apps/desktop` — verified by diff before removal: same two files, the
+  as `apps/desktop` *(historical citation)* <!-- doc-audit: historical-path --> — verified by diff before removal: same two files, the
   knot-editor copy being the one under its CI, with mere's differing only in the
   standalone-workspace scaffolding that dies with it and in three cosmetic test
-  and type-annotation details. `ports/knot/editor-host` was **moved**, not
+  and type-annotation details. `ports/knot/editor-host` *(historical citation)* <!-- doc-audit: historical-path --> was **moved**, not
   removed, to `crates/inker/knot-editor-host`: it is inker-family integration
-  code rather than Knot product source, and `ports/knot/` should not survive as
+  code rather than Knot product source, and `ports/knot/` *(historical citation)* <!-- doc-audit: historical-path --> should not survive as
   a directory holding only it. 39 owned sources deleted, 5 files moved with
   `git mv`.
 
@@ -2484,7 +2484,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   `git = "https://github.com/merely-made/knot-editor.git"` at
   `fcd004b655b595038eba0a7e49f209b8477edadf`, the revision that pins mere
   `d82afa17` and genet `115d348d`. Djinn takes `knot-editor` through the
-  workspace table. The `exclude` entry for `ports/knot/desktop` and the nesting
+  workspace table. The `exclude` entry for `ports/knot/desktop` *(historical citation)* <!-- doc-audit: historical-path --> and the nesting
   caveat that named two paths are gone.
 
   **The patch table this needed, and the one it did not.** Knot pins ~30 Mere
@@ -2530,7 +2530,7 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   under `ports/`, citing the extraction plan by path. `ports/djinn/README.md`,
   the Turnstone suite census's Knot section, and the configuration-ownership
   plan's live code list name the new source. Seven Knot plans and briefs kept
-  their text and gained a repository note saying the `ports/knot` paths in them
+  their text and gained a repository note saying the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths in them
   are the layout their receipts landed against; the lane brief's opening
   sentence, which asserted a live ruling rather than a receipt, was corrected.
   `scripts/cross-repo-smoke.ps1` lost its two `-p knot` steps, which had been

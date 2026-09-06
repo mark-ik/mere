@@ -28,7 +28,7 @@ genet-clipboard into being): a concrete consumer first, generality second.
 
 ## What already exists (verified in code, 2026-07-22)
 
-In `repos/personae` (single crate, MIT/Apache):
+In `repos/personae` *(historical citation)* <!-- doc-audit: historical-path --> (single crate, MIT/Apache):
 
 - `vault` module: `ProfileId`, `ProtocolKey`, `CredentialLineage`,
   `UnlockTier`, `SecretBytes`, `IdentitySlot` (Direct slots explicitly include
@@ -266,13 +266,13 @@ oversell.
   command that mints a key straight into the vault so no plaintext file
   ever exists; ShortTtl relock enforcement.
 - 2026-07-24 **fold executed.** The 2026-07-23 repo consolidation absorbed
-  personae into mere; `repos/personae` is gone, authoritative source is now
-  `crates/persona/personae` (workspace member, subtree-merged from V3 commit
+  personae into mere; `repos/personae` *(historical citation)* <!-- doc-audit: historical-path --> is gone, authoritative source is now
+  `crates/dramatis/personae` (workspace member, subtree-merged from V3 commit
   8b45848 so all code + this plan's progress landed). Re-verified in the mere
   workspace: `cargo test -p personae --features agent` = 71 green. The running
   Windows agent was rebuilt from mere's copy, reinstalled, and re-proved a
   real laptop login, so the live system is anchored to the authoritative
-  source. Added `crates/persona/personae/install-agent-windows.ps1` (builds
+  source. Added `crates/dramatis/personae/install-agent-windows.ps1` (builds
   from mere → installs → manages the logon task) so the source→install path
   is documented now that it moved. hocket already git-deps personae from mere
   main, so its build gets this work.

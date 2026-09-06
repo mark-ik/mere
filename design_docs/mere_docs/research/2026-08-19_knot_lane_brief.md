@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 Status: position revised and cuts implemented 2026-08-20.
 

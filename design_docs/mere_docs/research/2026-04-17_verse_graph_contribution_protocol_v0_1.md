@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/technical_architecture/2026-04-17_verse_graph_contribution_protocol_v0_1.md`
+> - Original path: `design_docs/verse_docs/technical_architecture/2026-04-17_verse_graph_contribution_protocol_v0_1.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `6ab4c22f`
 >
 > None of it was ever built. It is filed here as research, not as a plan and
@@ -823,10 +823,10 @@ Public discovery overlays such as libp2p-based routing may be added later. Not r
 
 ## 18. Graphshell Implementation Mapping
 
-- [../../../mods/native/verse/mod.rs](../../../mods/native/verse/mod.rs): Ed25519-backed iroh identity, trusted-peer storage, workspace-grant concepts usable for community identity and admission.
-- [../../../model/archive.rs](../../../model/archive.rs): signed portable archive objects and privacy classes; useful precedent for signed envelopes.
-- [../../../app/clip_capture.rs](../../../app/clip_capture.rs): structured capture data; a precursor to canonicalization.
-- [../../../services/query/mod.rs](../../../services/query/mod.rs), [../../../services/facts/mod.rs](../../../services/facts/mod.rs): local structured querying over projected history facts; no distributed contribution support yet.
+- [../../../mods/native/verse/mod.rs](../../../mods/native/verse/mod.rs) *(historical citation)* <!-- doc-audit: historical-link -->: Ed25519-backed iroh identity, trusted-peer storage, workspace-grant concepts usable for community identity and admission.
+- [../../../model/archive.rs](../../../model/archive.rs) *(historical citation)* <!-- doc-audit: historical-link -->: signed portable archive objects and privacy classes; useful precedent for signed envelopes.
+- [../../../app/clip_capture.rs](../../../app/clip_capture.rs) *(historical citation)* <!-- doc-audit: historical-link -->: structured capture data; a precursor to canonicalization.
+- [../../../services/query/mod.rs](../../../services/query/mod.rs) *(historical citation)* <!-- doc-audit: historical-link -->, [../../../services/facts/mod.rs](../../../services/facts/mod.rs) *(historical citation)* <!-- doc-audit: historical-link -->: local structured querying over projected history facts; no distributed contribution support yet.
 
 Gaps before Graphshell can claim a VGCP implementation:
 

@@ -10,9 +10,9 @@
 
 ## Supersedes / builds on
 
-- [`2026-05-11_node_per_tile_lineage_plan.md`](2026-05-11_node_per_tile_lineage_plan.md) — same intent, but its file/type references (`mere-host`, `TileManager`, host-side per-tile history) predate the meerkat/orrery/platen architecture **and** the substrate has since moved onto the kernel `Node` itself (`Node.navigation_memory`). Architecture-stale; this plan replaces its "where" while keeping its "what."
-- [`2026-05-18_node_identity_and_duplicates_plan.md`](2026-05-18_node_identity_and_duplicates_plan.md) — decided UUID identity, no URL-dedup, `find` vs `create` split, the `OpenAddressAsNewNode` gesture, lineage-as-address-history, sibling graphlets. Same architecture-staleness caveat. This plan carries its gesture/identity decisions onto the live path.
-- `node-lineage` crate ([`crates/graph/node-lineage`](../../../crates/graph/node-lineage)) — the Entry/Visit/Owner engine. Built, tested. Unchanged by this plan except possibly small additive incremental ops.
+- [`2026-05-11_node_per_tile_lineage_plan.md`](2026-05-11_node_per_tile_lineage_plan.md) *(historical citation)* <!-- doc-audit: historical-link --> — same intent, but its file/type references (`mere-host`, `TileManager`, host-side per-tile history) predate the meerkat/orrery/platen architecture **and** the substrate has since moved onto the kernel `Node` itself (`Node.navigation_memory`). Architecture-stale; this plan replaces its "where" while keeping its "what."
+- [`2026-05-18_node_identity_and_duplicates_plan.md`](2026-05-18_node_identity_and_duplicates_plan.md) *(historical citation)* <!-- doc-audit: historical-link --> — decided UUID identity, no URL-dedup, `find` vs `create` split, the `OpenAddressAsNewNode` gesture, lineage-as-address-history, sibling graphlets. Same architecture-staleness caveat. This plan carries its gesture/identity decisions onto the live path.
+- `node-lineage` crate ([`crates/graph/node-lineage`](../../../crates/graph/node-lineage) *(historical citation)* <!-- doc-audit: historical-link -->) — the Entry/Visit/Owner engine. Built, tested. Unchanged by this plan except possibly small additive incremental ops.
 - [`history.rs`](../../../crates/graph/graph-kernel/src/graph/history.rs) — `NodeNavigationMemory`, the per-node projection over node-lineage, already a field on every `Node`. Needs incremental nav ops added.
 
 ## 1. The model (as confirmed 2026-06-05)
@@ -31,7 +31,7 @@
 ## 2. Findings — what exists vs what's wired
 
 - **Built + persisted:** `Node.navigation_memory: NodeNavigationMemory` on every kernel node, with `history_projection()` / `current_history_url()` / `history_branch_projection()` / `replace_history_state()`, round-tripped through the snapshot. The forkable, append-only, branch-aware history is done.
-- **Dormant:** the only callers of the history API are tests and snapshot I/O. The live navigation path (`Chrome` omnibar → `sync_orrery` → `orrery.visit`) never touches `navigation_memory`. `orrery.visit` ([orrery-host/src/lib.rs:547](../../../crates/orrery-host/src/lib.rs#L547)) still does the *old* model: dedup by URL, mint a node, add a hyperlink edge, move the single orrery cursor. That mismatch is the exact bug: navigating the focused tile mints a stray node instead of advancing the node.
+- **Dormant:** the only callers of the history API are tests and snapshot I/O. The live navigation path (`Chrome` omnibar → `sync_orrery` → `orrery.visit`) never touches `navigation_memory`. `orrery.visit` ([orrery-host/src/lib.rs:547](../../../crates/orrery-host/src/lib.rs#L547) *(historical citation)* <!-- doc-audit: historical-link -->) still does the *old* model: dedup by URL, mint a node, add a hyperlink edge, move the single orrery cursor. That mismatch is the exact bug: navigating the focused tile mints a stray node instead of advancing the node.
 - **Net-new:** the across-node MRU log (previous/next) has no substrate anywhere. The "activation" in the constellation is content-actor rendering, not a navigation log.
 - **Edge taxonomy:** the kernel already has a relation taxonomy ([`edge_taxonomy.rs`](../../../crates/graph/graph-kernel/src/graph/edge_taxonomy.rs)); Phase 3 maps the three buckets onto it (verify exact `EdgeFamily`/sub-kind variants at build time) rather than inventing new edge kinds.
 

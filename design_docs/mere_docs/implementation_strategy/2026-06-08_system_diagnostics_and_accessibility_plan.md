@@ -2,7 +2,7 @@
 
 **Date**: 2026-06-08
 **Status**: Planning. Follow-on to the apparatus pane/theme switcher pass.
-**Related**: [apparatus pane + runtime theme switcher](2026-06-08_apparatus_pane_and_theme_switcher_plan.md), [frame tree in meerkat](2026-06-08_frame_tree_in_meerkat_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md), [Graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md), [Graphshell docs full harvest](../research/2026-05-27_graphshell_docs_full_harvest.md), [spatial chrome IR brief](../research/2026-05-15_spatial_chrome_ir_brief.md), [spatial chrome modular adoption plan](2026-05-15_spatial_chrome_modular_adoption_plan.md).
+**Related**: [apparatus pane + runtime theme switcher](2026-06-08_apparatus_pane_and_theme_switcher_plan.md), [frame tree in meerkat](../../archive_docs/2026-06-09_completed_plans/2026-06-08_frame_tree_in_meerkat_plan.md), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md), [Graphshell harvest brief](../research/2026-05-17_graphshell_harvest_brief.md), [Graphshell docs full harvest](../research/2026-05-27_graphshell_docs_full_harvest.md), [spatial chrome IR brief](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_ir_brief.md), [spatial chrome modular adoption plan](../../archive_docs/2026-06-09_pivot_superseded/2026-05-15_spatial_chrome_modular_adoption_plan.md).
 
 Build one host observability spine for **diagnostics, tracing, UX events,
 UxTree/accessibility, probes, and agent harnesses**. The near-term user surface is
@@ -27,7 +27,7 @@ through typed observations and actions rather than raw pixel puppetry.
 - `crates/forme/uxtree` already produces deterministic accessibility-shaped
   trees and can stitch subtrees into a `TreeUpdate`. This is the bridge between
   Mere's semantic surfaces and AccessKit.
-- `crates/shell/frame` now gives meerkat a real pane tree. Its projected leaves
+- `crates/shell/frame` *(historical citation)* <!-- doc-audit: historical-path --> now gives meerkat a real pane tree. Its projected leaves
   are the natural unit for diagnostics, focus, accessibility bounds, and agent
   action targets.
 - `crates/domain/apparatus` is a useful domain skeleton for an

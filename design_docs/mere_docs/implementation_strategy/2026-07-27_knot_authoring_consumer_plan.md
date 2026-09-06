@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 **Date:** 2026-07-27
 **Status:** all Knot-owned work in the reconciled sequence is complete locally:
@@ -65,7 +65,7 @@ records their implementation.
 - `KnotEndpoint` presents cards and glyphs, advertises no actions, and rejects
   every intent as read-only. Its vault disclosure test correctly proves that
   neither key nor authored body crosses today.
-- `ports/graphshell::sessions` is a receipt helper, not a product session. It
+- `ports/graphshell::sessions` *(historical citation)* <!-- doc-audit: historical-path --> is a receipt helper, not a product session. It
   spawns an endpoint, resolves resources, invokes advertised actions with empty
   payloads, then shuts the process down. Authoring needs a retained carrier and
   client state.
@@ -345,7 +345,7 @@ The first follow-on uses the same retained session, target binding, write grant,
 base token, stale refusal, and revision-bell refresh. It gets its own typed
 `knot.clip.insert/v1` payload so `ClippedFrom` provenance remains a domain fact;
 it is not disguised as an unstructured full-text replacement. The host-neutral
-`crates/import::web_clip` producer supplies the semantic clip. Knot validates
+`crates/import::web_clip` *(historical citation)* <!-- doc-audit: historical-path --> producer supplies the semantic clip. Knot validates
 and records the document mutation and provenance.
 
 Creating a new clip document requires an explicitly advertised Create action.

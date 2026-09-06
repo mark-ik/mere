@@ -4,7 +4,7 @@
 **Status**: Design brief. No code proposed. Binds the layer between two seams that already
 exist: the model runtime seam (the [local models harness brief](2026-06-24_local_models_harness_brief.md))
 and the typed actuation seam (the D7 agent harness in
-[`meerkat/src/agent_harness.rs`](../../../crates/meerkat/src/agent_harness.rs)). Neither owns
+[`meerkat/src/agent_harness.rs`](../../../crates/meerkat/src/agent_harness.rs) *(historical citation)* <!-- doc-audit: historical-link -->). Neither owns
 the loop that puts a model behind the actions. This doc is that loop.
 
 **Related (the agentic lane):**

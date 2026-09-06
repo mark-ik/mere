@@ -42,11 +42,11 @@ keeps the wasm/PWA target viable. Verified: `sparql_selects_a_literal_and_an_edg
 
 ### Slice 2 — the `>sparql` omnibar verb (host)
 
-The command shell ([`crates/meerkat/src/shell_eval.rs`]) gained a `sparql_query`
+The command shell ([`crates/meerkat/src/shell_eval.rs` *(historical citation)* <!-- doc-audit: historical-path -->]) gained a `sparql_query`
 field on `ShellOutcome` and an arg-bearing `sparql("…")` binding (mirroring the
 `relate("…")` precedent: record into the outcome, don't mutate inline, since the
 shell snapshot has no RDF graph); `complete()` ghosts the verb. The host drain
-([`crates/meerkat/src/command_drain.rs`] `submit_omnibar_command` → `run_sparql_query`
+([`crates/meerkat/src/command_drain.rs` *(historical citation)* <!-- doc-audit: historical-path -->] `submit_omnibar_command` → `run_sparql_query`
 → `format_sparql_rows`) runs it over the focused graph and echoes a one-line
 result. meerkat enables `linked-data/query`. Verified: full meerkat suite green
 (64 lib + 94 bin), `shell_eval::tests::sparql_records_the_query_for_the_host_to_run`.

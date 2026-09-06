@@ -237,7 +237,7 @@ genet's `design_docs/`, not here.
   rate-limit before rollout. Turnstone has no notification concept (its
   `AppEvent` stream is telemetry for the a11y and app arms).
 - **Dead code**: `ToastSpec` / `ToastSeverity` / `FrameViewModel.toasts` at
-  `crates/shell/chrome/src/frame_model.rs:404-416`, egui/iced-era, no producer,
+  `crates/shell/chrome/src/frame_model.rs:404-416` *(historical citation)* <!-- doc-audit: historical-path -->, egui/iced-era, no producer,
   no consumer. A code ruling.
 
 ### From graph_object_roster_detail_cards (model migrated, views deleted)
@@ -251,7 +251,7 @@ genet's `design_docs/`, not here.
 
 ### From kith_capability_sharing (gate cleared 2026-08-09, never started)
 
-- **Owed by name**: `crates/mesh/mesh/src/lease.rs:22-26` — "the kith plan,
+- **Owed by name**: `crates/mesh/mesh/src/lease.rs:22-26` *(historical citation)* <!-- doc-audit: historical-path --> — "the kith plan,
   which widens the ring beyond one owner, has to revisit it"; gemot is still
   at the ring rule with capability gating a later milestone. **Re-scope onto
   the shipped vocabulary** — `crates/capability` (`Cap::{Power,Scope,Facet}`),

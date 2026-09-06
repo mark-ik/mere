@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/graphshell_docs/technical_architecture/2026-03-29_middlenet_engine_spec.md`
+> - Original path: `design_docs/graphshell_docs/technical_architecture/2026-03-29_middlenet_engine_spec.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `401e2fcc`
 >
 > None of it was ever built as written. It is filed here as research, not as a
@@ -47,34 +47,34 @@ engine that serves it, and describe how it fits into each host envelope.
 
 **Related docs**:
 
-- [`2026-03-29_portable_web_core_host_envelopes.md`](2026-03-29_portable_web_core_host_envelopes.md)
+- [`2026-03-29_portable_web_core_host_envelopes.md`](2026-03-29_portable_web_core_host_envelopes.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — host envelope model, portability strategy, and naming context for the
   portable web core
 - [`2026-04-16_middlenet_lane_architecture_spec.md`](2026-04-16_middlenet_lane_architecture_spec.md)
   — lane-oriented crate split and selection model: direct document renderer,
   HTML lane built from Blitz's DOM/style/layout stack but painted through
   Graphshell's WebRender fork, Servo fallback, and shared host plumbing
-- [`2026-03-29_workspace_restructuring_plan.md`](2026-03-29_workspace_restructuring_plan.md)
+- [`2026-03-29_workspace_restructuring_plan.md`](2026-03-29_workspace_restructuring_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — Cargo workspace layout: crate responsibilities, dependency graph, migration steps
-- [`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md)
+- [`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — canonical protocol packaging classes, default portable floor, and host-aware degradation model
-- [`2026-04-09_identity_convergence_and_person_node_model.md`](2026-04-09_identity_convergence_and_person_node_model.md)
+- [`2026-04-09_identity_convergence_and_person_node_model.md`](2026-04-09_identity_convergence_and_person_node_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — current person-node convergence baseline, endpoint binding rules, and resolution provenance model
-- [`2026-04-09_graphshell_verse_uri_scheme.md`](2026-04-09_graphshell_verse_uri_scheme.md)
+- [`2026-04-09_graphshell_verse_uri_scheme.md`](2026-04-09_graphshell_verse_uri_scheme.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — canonical `verso://` address space, compatibility aliases, and reserved future categories
-- [`2026-02-18_universal_node_content_model.md`](2026-02-18_universal_node_content_model.md)
+- [`2026-02-18_universal_node_content_model.md`](2026-02-18_universal_node_content_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — node as persistent content container independent of renderer
-- [`../../verso_docs/technical_architecture/VERSO_AS_PEER.md`](../../verso_docs/technical_architecture/VERSO_AS_PEER.md)
+- [`../../verso_docs/technical_architecture/VERSO_AS_PEER.md`](../../verso_docs/technical_architecture/VERSO_AS_PEER.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — current web-peer placement of Servo, Wry, and smallnet servers
-- [`../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md`](../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md)
+- [`../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md`](../../verso_docs/research/2026-03-28_smolnet_follow_on_audit.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — smallnet protocol audit including §10 Lagrange precedent: document model
   pipeline, Gopher conversion strategy, security posture, and protocol priority order
-- [`../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md`](../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md)
+- [`../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md`](../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — broader smolnet capability-model framing: transport-plus-format
   architecture, Tier A/B/C/D coverage priorities, and Scroll's UDC alignment
 - [`../research/2026-04-11_linked_data_over_middlenet_relevance_note.md`](../research/2026-04-11_linked_data_over_middlenet_relevance_note.md)
   — RDF / JSON-LD / Gemini linked-data bridge relevance and non-goals
-- [`../research/2026-03-01_webrender_wgpu_renderer_research.md`](../research/2026-03-01_webrender_wgpu_renderer_research.md)
+- [`../research/2026-03-01_webrender_wgpu_renderer_research.md`](../research/2026-03-01_webrender_wgpu_renderer_research.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — WebRender/wgpu rendering research
 
 ---
@@ -412,7 +412,7 @@ semantics. It does **not** own transport realization.
   listeners, and other host-specific runtime capabilities.
 
 Default vs optional protocol packaging is governed by
-[`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md).
+[`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md) *(historical citation)* <!-- doc-audit: historical-link -->.
 
 ---
 

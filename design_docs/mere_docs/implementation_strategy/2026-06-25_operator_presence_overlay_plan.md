@@ -38,14 +38,14 @@ agent walk the graph halo by halo and then watch its attention move down the pag
   references and a colour; each consumer paints them at its own positions, so the orrery,
   the gloss lens, and the minimap all show them). A presence ring is one more variant,
   `OperatorFocus { operator, colour, node }`, fed by a different signal.
-- **The agent already has a focus (built).** [`agent_harness.rs`](../../../crates/meerkat/src/agent_harness.rs)
+- **The agent already has a focus (built).** [`agent_harness.rs`](../../../crates/meerkat/src/agent_harness.rs) *(historical citation)* <!-- doc-audit: historical-link -->
   exposes `AgentObservation { focused_node, surfaces (focused: bool), a11y, … }`, the same
   semantic state Apparatus and the a11y projection consume. The agent tracks what it is
   looking at already, so emitting its focus is surfacing a field it already holds, not new
   instrumentation.
 - **A document is already a tree of focusable elements (built).** The a11y projection turns
   a rendered document into a semantic element tree (sections, divs), and the
-  [find overlay](../../../crates/meerkat/src/find.rs) already highlights document regions
+  [find overlay](../../../crates/meerkat/src/find.rs) *(historical citation)* <!-- doc-audit: historical-link --> already highlights document regions
   at their rects. So "highlight the section an operator is on" reuses the rect-highlight
   path with a different target and colour.
 - **Node colours + selection rings + per-pane focus (built).** The visual vocabulary

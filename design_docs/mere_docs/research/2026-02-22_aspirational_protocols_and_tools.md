@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/research/2026-02-22_aspirational_protocols_and_tools.md`
+> - Original path: `design_docs/verse_docs/research/2026-02-22_aspirational_protocols_and_tools.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `9a6526a7`
 >
 > None of it was ever built. It is filed here as research, not as a plan and

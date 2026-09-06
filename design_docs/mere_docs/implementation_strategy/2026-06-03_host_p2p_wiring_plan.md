@@ -7,7 +7,7 @@ surface + cheap p2p win)**: how the proven p2p substrate (transport + murm's
 `SyncedCabal` + tessera's `SyncedMoot`) wires into the meerkat host loop.
 **Grounded in**: a read of meerkat's actual loop this session (`main.rs`,
 `fetch.rs`, `lib.rs`) against the 2026-06-03 tree, plus the just-landed tessera
-store/sync productization ([tessera plan](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md)).
+store/sync productization ([tessera plan](../../archive_docs/2026-06-09_completed_plans/2026-06-02_tessera_plan.md)).
 
 > **Historical/supersession note (2026-09-05):** This pre-consolidation
 > Meerkat wiring proposal retains its seam analysis as context, but its host and
@@ -115,7 +115,7 @@ pattern, not building one.
   - *Manual*: a command-palette verb / CLI flag / config file carrying a peer
     `EndpointAddr` + topic; the host calls `add_peer` + `set_topics`.
   - *Discovery*: wire the transport's existing mDNS / random-walk local discovery
-    (per the [p2panda spike](2026-06-01_p2panda_substrate_spike_plan.md)) so
+    (per the [p2panda spike](../../archive_docs/2026-06-09_completed_plans/2026-06-01_p2panda_substrate_spike_plan.md)) so
     same-LAN instances auto-find. More magical, slightly bigger.
   **Done**: two meerkat instances converge (the library convergence proof, now in
   the running host); the chip shows items caught up + last-synced.
@@ -180,13 +180,13 @@ pattern, not building one.
   steer on the three decisions, then S5.0.
 - **2026-06-03 — S5.0 landed: the p2p foundation stands up in the host (tessera
   lane, Mark's pick).** Mirrors the fetcher seam exactly. New
-  [`sync`](../../../crates/meerkat/src/sync.rs) bin module: a `SyncHost` owns a
+  [`sync`](../../../crates/meerkat/src/sync.rs) *(historical citation)* <!-- doc-audit: historical-link --> bin module: a `SyncHost` owns a
   tokio runtime, binds one `P2pandaTransport` (ephemeral seeded identity), joins
   a tessera `SyncedMoot` over an in-memory `TesseraStore`, and a 1s status poller
   pushes each `SyncStatus` change over an `mpsc` channel + an `EventLoopProxy`
   wake. `user_event` drains it (beside the fetch channels) and folds it into
   `Chrome.sync`, a new host-neutral
-  [`SyncIndicator`](../../../crates/meerkat/src/sync_indicator.rs) view-model
+  [`SyncIndicator`](../../../crates/meerkat/src/sync_indicator.rs) *(historical citation)* <!-- doc-audit: historical-link --> view-model
   rendered as an honest status chip in the toolbar band (`p2p off` → `tessera:
   idle` → `tessera: syncing` → `tessera: N ops`). Setup failure disables p2p,
   never the shell. **Runtime-verified**: the built shell boots and logs `p2p sync

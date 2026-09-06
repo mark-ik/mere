@@ -26,7 +26,7 @@ persistence of a vector index).
 
 **Scope**:
 
-- New crate `crates/eidetic/eidetic-opfs/`.
+- New crate `crates/eidetic/eidetic-opfs/` *(planned target)* <!-- doc-audit: planned-path -->.
 - Hand-rolled `Store` over `FileSystemSyncAccessHandle` in a dedicated worker.
 - One file per blob keyed by hash; manifest store as a directory under a known prefix.
 - wasm-bindgen + `web-sys` for OPFS access.
@@ -182,7 +182,7 @@ checkout at `Code/.tantivy-probe` — and the design pass §7.5):**
 ## Open questions (carried forward)
 
 - **Federated identity for engram signatures** — waits on the persona/identity
-  vault (`crates/persona/identity`, now built); wire signature verification once
+  vault (`crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path -->, now built); wire signature verification once
   signed engrams cross a peer boundary.
 - **Schema-engram GC semantics** — surfaces when GC is implemented; no current
   phase. The engram lifecycle policy (durable by default, no implicit deletion)

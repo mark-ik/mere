@@ -88,7 +88,7 @@ it for subresource integrity). `cargo metadata` validates.
 ## Migrations done this pass
 
 **icu 1.5 → 2.x, genet.** `icu_locid` renamed to `icu_locale_core` upstream;
-bumped `components/fonts` and `components/malloc_size_of` (the two direct
+bumped `components/fonts` *(historical citation)* <!-- doc-audit: historical-path --> and `components/malloc_size_of` (the two direct
 1.5-line consumers) plus the dead `icu_segmenter` workspace pin, all to 2.2.0.
 Code changes: `icu_locid::subtags::{Language, language}` →
 `icu_locale_core::subtags::{Language, language}` (module path only, same

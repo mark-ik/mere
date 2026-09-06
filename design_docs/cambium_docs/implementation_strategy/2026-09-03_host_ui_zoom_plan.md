@@ -4,7 +4,7 @@
 the Cambium family (platform boundary plan, P2), landing in
 `mere_docs/implementation_strategy/`; it moved again the same day into the new
 `cambium_docs/` area root Mark ruled for the Cambium family. Paths in it that
-read `components/cambium/...` are genet's, before the move; the code is at
+read `components/cambium/...` *(historical citation)* <!-- doc-audit: historical-path --> are genet's, before the move; the code is at
 `crates/cambium/...` here.
 
 **Status:** in progress (2026-09-03); Z0 through Z4 landed in genet, Z5 landed in isometry with its design figure open (see Progress); nothing committed. Founded when isometry's host migration exposed a panel laid out for
@@ -294,7 +294,7 @@ readback — at zoom 1.0 (twice), 1.25 and 0.9, on a 200% display.
 
 **Woodshed could not be built on 2026-09-03**, for reasons outside this work:
 `woodshed/Cargo.toml` is uncommitted-modified by another session and no longer
-declares the `workbench` workspace dependency `crates/woodshed-views` inherits,
+declares the `workbench` workspace dependency `woodshed/crates/woodshed-views` inherits,
 so `cargo metadata` fails before resolution; and `woodshed/.cargo/config.toml`
 redirects the whole genet graph to `.../worktrees/genet-workbench`, a checkout
 that does not exist on this machine. Repairing either means editing woodshed,

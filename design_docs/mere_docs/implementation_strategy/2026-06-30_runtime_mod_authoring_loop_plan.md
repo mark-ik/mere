@@ -25,7 +25,7 @@ The trust split is load-bearing:
 
 The command side already has the right shape.
 
-- `crates/meerkat/src/shell_eval.rs` is the privileged omnibar Rhai lane.
+- `crates/meerkat/src/shell_eval.rs` *(historical citation)* <!-- doc-audit: historical-path --> is the privileged omnibar Rhai lane.
 - It reads a frozen `ShellContext` and emits a `ShellOutcome`.
 - It registers one Rhai binding per `Command::ALL` verb.
 - It records arg-bearing requests such as `attach_script("path")`,

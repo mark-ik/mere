@@ -20,7 +20,7 @@ A pane is described by a small, shared contract — the first dock API:
 - **focus** — whether it holds input focus.
 - **context binding** (optional) — the selection / graph the pane follows, for the graph-contingent panes.
 
-Panes are **per-window** (like the [multi-window synced panels](../../mere_docs/implementation_strategy/2026-06-04_multi_window_plan.md) model: window-specific, graph-bound, tearable), reusing the chrome's separate-roots discipline (a pane is a docked root composited beside the content-root, not a tile inside it).
+Panes are **per-window** (like the [multi-window synced panels](../../mere_docs/implementation_strategy/2026-06-04_multi_window_plan.md) *(historical citation)* <!-- doc-audit: historical-link --> model: window-specific, graph-bound, tearable), reusing the chrome's separate-roots discipline (a pane is a docked root composited beside the content-root, not a tile inside it).
 
 ## The catalog (grouped by primary authority)
 

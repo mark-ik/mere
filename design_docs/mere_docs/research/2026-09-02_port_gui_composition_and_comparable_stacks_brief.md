@@ -19,7 +19,7 @@ sharpened 2026-09-02), the
 (composable views; the anti-shell test; the capability named Scenograph), the
 [scenograph content catalog](2026-08-18_scenograph_content_catalog.md)
 (the ten scene regimes), and turnstone's
-`design_docs/2026-07-18_meerkat_harvest.md` (what meerkat was and what
+`design_docs/2026-07-18_meerkat_harvest.md` *(historical citation)* <!-- doc-audit: historical-path --> (what meerkat was and what
 carried).
 
 ## 1. The question, in Mark's terms
@@ -56,7 +56,7 @@ in Mere beside the scene family — one layer, one owner.
 | Port | Projection endpoint | Cambium surface | What it has instead |
 | --- | --- | --- | --- |
 | graphshell | eleven `ProjectionSource` impls (MereHost, Identity, Live, fixtures) | the Projection Editor over Workbench | — |
-| knot | one (`ports/knot`) | through knot-document | Turnstone panes |
+| knot | one (`ports/knot` *(historical citation)* <!-- doc-audit: historical-path -->) | through knot-document | Turnstone panes |
 | castellan | none | none | `PortableCardV1` projections (chirograph types, no endpoint) |
 | djinn | none | none | consumes chirograph for personal-sync resources |
 | gazette | none | none | the Ledger over `sceno` + `chirograph`, static DOM |

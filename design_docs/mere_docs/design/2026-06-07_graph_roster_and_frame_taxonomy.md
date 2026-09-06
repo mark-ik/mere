@@ -8,7 +8,7 @@
 **Date**: 2026-06-07
 **Status**: Design, from a Mark + Claude session. Frame-tree substrate and a seed
 roster pane now exist; the R-phase roster details here remain target design.
-**Related**: [gloss = Navigator](2026-06-07_gloss_navigator_design.md) (sibling surface), [card system + staging](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md), `frame` crate (`FrameLayout`), `platen` (tile tree), `cartography`, `aether` (fields).
+**Related**: [gloss = Navigator](2026-06-07_gloss_navigator_design.md) (sibling surface), [card system + staging](../implementation_strategy/2026-06-07_card_system_and_staging_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->, `frame` crate (`FrameLayout`), `platen` (tile tree), `cartography`, `aether` (fields).
 
 ---
 

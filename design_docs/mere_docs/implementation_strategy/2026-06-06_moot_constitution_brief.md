@@ -19,7 +19,7 @@ built coordination layer (`Ledger::scores`, `composite_score`) and already inclu
 a configurable preset authorizer (`tessera::gate::Policy` +
 `tessera::gate::authorize`) that the constitution must own rather than duplicate;
 meadowcap-shaped structural caps exist only as a proof/probe
-(`crates/probes/willow-cluster-cap`).
+(`crates/probes/willow-cluster-cap` *(historical citation)* <!-- doc-audit: historical-path -->).
 **Related**:
 
 - [`2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](2026-05-07_moot_tiers_and_voluntary_hosting_brief.md)
@@ -44,7 +44,7 @@ meadowcap-shaped structural caps exist only as a proof/probe
   policy over a shared log.
 - [`../research/2026-05-14_persona_model_brief.md`](../research/2026-05-14_persona_model_brief.md)
   — personas are the actors a constitution authorizes; the vault holds their keys.
-- [`../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md`](../../moothold_docs/implementation_strategy/2026-06-02_tessera_plan.md)
+- [`../../archive_docs/2026-06-09_completed_plans/2026-06-02_tessera_plan.md`](../../archive_docs/2026-06-09_completed_plans/2026-06-02_tessera_plan.md)
   — the reputation layer the constitution consumes, the existing preset authorizer
   the constitution should wrap / own, and the event-sourced fold (`from_events` /
   `apply` / `scores`) this brief proposes to mirror.

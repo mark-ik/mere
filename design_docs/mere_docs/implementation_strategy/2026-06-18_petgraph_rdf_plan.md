@@ -26,7 +26,7 @@ Cross-refs:
 - The RDF migration plan reviewed 2026-06-18 (its RocksDB-sidecar-as-authority
   "flip" is the rejected option); [two_natured_kernel_brief](../research/2026-05-30_two_natured_kernel_brief.md)
   (one authority, one-way); [statements_over_schema_stance](../technical_architecture/2026-05-22_statements_over_schema_stance.md).
-- Benchmark probe: `crates/probes/rdf-kernel-bench/` (standalone).
+- Benchmark probe: `crates/probes/rdf-kernel-bench/` *(historical citation)* <!-- doc-audit: historical-path --> (standalone).
 
 ---
 
@@ -214,7 +214,7 @@ kernel directly, with no oxigraph Store in the path.
 - Gate: re-run the benchmark probe with interning and the real oxigraph in-memory
   Store for comparison; decide on the measured footprint, not on vibes.
 - **Gate measured 2026-07-06 — Phase 4 is not close, and its premise is wrong.**
-  `crates/probes/rdf-kernel-footprint/` (a counting global allocator over a
+  `crates/probes/rdf-kernel-footprint/` *(historical citation)* <!-- doc-audit: historical-path --> (a counting global allocator over a
   realistic enriched-kernel graph; the old `rdf-kernel-bench` measured the
   rejected held-RDF-truth axis, not this one) decomposes live heap at 50k nodes /
   100k statements / 2 props: **images 352 MiB (64%)** (`thumbnail_png` +
@@ -240,10 +240,10 @@ kernel directly, with no oxigraph Store in the path.
 
 - **Benchmark (held-RDF-truth axis)**: held-RDF-truth ≈ 11x memory / 19x load /
   18x mutate vs petgraph-truth (lower-bound proxy); hot path identical. The
-  original `crates/probes/rdf-kernel-bench/` (now gone from the tree) measured
+  original `crates/probes/rdf-kernel-bench/` *(historical citation)* <!-- doc-audit: historical-path --> (now gone from the tree) measured
   this — the *rejected* design's cost, not the enriched kernel's footprint.
 - **Footprint decomposition (Phase 4 axis, 2026-07-06)**:
-  `crates/probes/rdf-kernel-footprint/` measures where the enriched kernel's live
+  `crates/probes/rdf-kernel-footprint/` *(historical citation)* <!-- doc-audit: historical-path --> measures where the enriched kernel's live
   heap goes — images 64% / RDF content 28% (mostly struct, not strings) /
   structure 8% at 50k nodes; a term dictionary reclaims ~1%. See the Phase 4
   gate note. Re-runnable (`cargo run --release`).
@@ -305,7 +305,7 @@ kernel directly, with no oxigraph Store in the path.
 ## Progress
 
 - **2026-06-18** — Plan from the feasibility research + the perf benchmark (probe
-  `crates/probes/rdf-kernel-bench/`, held-RDF-truth ≈ 11x/19x/18x overhead, hot
+  `crates/probes/rdf-kernel-bench/` *(historical citation)* <!-- doc-audit: historical-path -->, held-RDF-truth ≈ 11x/19x/18x overhead, hot
   path identical) + the `QueryableDataset` and data-model research. Direction
   decided: petgraph truth, RDF as a lossless on-demand projection + a
   `QueryableDataset` SPARQL adapter; held-RDF-truth (the migration plan's flip)
@@ -346,7 +346,7 @@ kernel directly, with no oxigraph Store in the path.
   JSON-LD shapers still deliberately stay default-graph-only, and curated
   `title`/`tags` plus `rdf:type` classifications are not yet graph-scope-aware.
 - **2026-07-06 (Phase 4 gate measured — deferred on evidence)** — Built
-  `crates/probes/rdf-kernel-footprint/` (a counting global allocator decomposing the
+  `crates/probes/rdf-kernel-footprint/` *(historical citation)* <!-- doc-audit: historical-path --> (a counting global allocator decomposing the
   enriched kernel's live heap; the cited `rdf-kernel-bench` was gone and had measured
   the rejected held-RDF-truth axis anyway). At 50k nodes / 100k statements: images
   64% / RDF content 28% (mostly `EdgePayload` + statement struct, not repeated

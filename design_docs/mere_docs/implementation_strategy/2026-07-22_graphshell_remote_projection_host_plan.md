@@ -362,7 +362,7 @@ NetRender, a network runtime, or an application dependency, and the retired
 donor remains recoverable in repository history without entering the active
 dependency graph.
 
-**Published 2026-07-22:** `repos/graphshell` is an independent Git
+**Published 2026-07-22:** `repos/graphshell` *(historical citation)* <!-- doc-audit: historical-path --> is an independent Git
 workspace containing `chirograph`, `graphshell-client`,
 `graphshell-endpoint`, and the `graphshell` facade. The protocol serializes
 only Scenograph scores/scenes plus session/status/intent envelopes; client
@@ -580,16 +580,16 @@ independence. Keep product adapters beside their source truth.
 
 | Current boundary | Ruling | Trigger or consequence |
 |---|---|---|
-| `repos/scenograph` | **Keep and fill.** Move Mere's generic `arrangements` algorithms into `scenomise`; move only kernel-neutral scene contracts into `sceno`; build diffs in `scenotime`. | The family already has Turnstone consumption and Isometry pull. |
+| `repos/scenograph` *(historical citation)* <!-- doc-audit: historical-path --> | **Keep and fill.** Move Mere's generic `arrangements` algorithms into `scenomise`; move only kernel-neutral scene contracts into `sceno`; build diffs in `scenotime`. | The family already has Turnstone consumption and Isometry pull. |
 | Mere `canvas/{canvas,cartography,arrangements}` | **Withdraw the old wholesale-promotion plan.** `mere-canvas` is visibly Mere-specific: it owns a kernel graph, signals, seiche bridge, Genet DOM, NetRender paint, and a native bin. Keep that graph surface in Mere. `mere-cartography` becomes the Mere-to-Scenograph adapter. | Scenograph now owns the portable scene/layout boundary. |
 | Shared graph-view UI | **Promote through Cambium/Sprigging only after a second consumer, initially Woodshed, agrees on the interaction contract.** Reuse camera, selection, semantic children, and scene realization; keep Mere graph mutation adapters in Mere. | Woodshed currently has its own graph swatch and is the real second consumer. |
 | Mere `content-contract` | **Decompose instead of exporting.** Move NetRender scene/font/image serialization to NetRender; move generic document-worker messages to Genet; keep Mere graph contributions in Mere. Graphshell consumes the renderer wire through a presentation codec. | The crate currently depends on `document-canvas`, Mere kernel, linked-data, and NetRender, so it is not a portable remote contract. |
-| `repos/conatus` | **Keep.** It already corrected the former numen/quint/seiche sibling sprawl into one physics family. `scenomise` may call its solvers without absorbing it. | Dynamic physics has a different runtime and release surface from analytic placement. |
-| `repos/cambium`, `repos/genet`, `repos/netrender` | **Keep their present repo boundaries.** Cambium owns reactive UI, Genet owns document engine and host integration, NetRender owns paint realization. | Their license and dependency directions are already explicit. Graphshell composes them only in its application crate. |
-| Mere `eidetic` core and backends beside `repos/eidetic` | **Move the generic typed-memory lane into the Eidetic family.** Move the `eidetic` crate, the Fjall backend under a `muniment`-appropriate name, and the generic HTTPS fetcher. Keep browsing search and the Iroh cross-family adapter with their product/integration owners until the Murm move settles. | The July 9 anti-sibling ruling predated the July 21 Eidetic family repo. The current `eidetic` crate calls itself host-agnostic and depends only on Eidetic-family primitives. |
-| Mere `crates/persona/identity` beside `repos/personae` | **Delete the in-Mere duplicate after consumer checks.** The workspace already aliases `identity` to `personae`; the old package is still listed as a member but has no live consumer. | One trust root matters for Graphshell session identity. |
-| Mere `murm`, `murm-replication`, transport, Moot crates | **Execute the existing promotion plan.** Create `repos/murm` and `repos/moot`; Graphshell uses the lower peer transport, not the conversation facade. | Isometry already consumes these reusable crates from the Mere repository. Graphshell adds another non-Mere consumer. |
-| `repos/retinue`, `repos/tulle`, `repos/sennet`, `repos/tucket` | **Merge into one permissive radio-family workspace**, preserving crate names, histories, firmware targets, and provenance files. Retinue can remain the repository name. | The current sibling path links contradict the stated one-workspace goal and make one hardware acceptance span four releases. GPL-derived personalities remain downstream image/process integrations. |
+| `repos/conatus` *(historical citation)* <!-- doc-audit: historical-path --> | **Keep.** It already corrected the former numen/quint/seiche sibling sprawl into one physics family. `scenomise` may call its solvers without absorbing it. | Dynamic physics has a different runtime and release surface from analytic placement. |
+| `repos/cambium` *(historical citation)* <!-- doc-audit: historical-path -->, `repos/genet`, `repos/netrender` | **Keep their present repo boundaries.** Cambium owns reactive UI, Genet owns document engine and host integration, NetRender owns paint realization. | Their license and dependency directions are already explicit. Graphshell composes them only in its application crate. |
+| Mere `eidetic` core and backends beside `repos/eidetic` *(historical citation)* <!-- doc-audit: historical-path --> | **Move the generic typed-memory lane into the Eidetic family.** Move the `eidetic` crate, the Fjall backend under a `muniment`-appropriate name, and the generic HTTPS fetcher. Keep browsing search and the Iroh cross-family adapter with their product/integration owners until the Murm move settles. | The July 9 anti-sibling ruling predated the July 21 Eidetic family repo. The current `eidetic` crate calls itself host-agnostic and depends only on Eidetic-family primitives. |
+| Mere `crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path --> beside `repos/personae` *(historical citation)* <!-- doc-audit: historical-path --> | **Delete the in-Mere duplicate after consumer checks.** The workspace already aliases `identity` to `personae`; the old package is still listed as a member but has no live consumer. | One trust root matters for Graphshell session identity. |
+| Mere `murm`, `murm-replication`, transport, Moot crates | **Execute the existing promotion plan.** Create `repos/murm` *(historical citation)* <!-- doc-audit: historical-path --> and `repos/moot` *(historical citation)* <!-- doc-audit: historical-path -->; Graphshell uses the lower peer transport, not the conversation facade. | Isometry already consumes these reusable crates from the Mere repository. Graphshell adds another non-Mere consumer. |
+| `repos/retinue`, `repos/tulle` *(historical citation)* <!-- doc-audit: historical-path -->, `repos/sennet` *(historical citation)* <!-- doc-audit: historical-path -->, `repos/tucket` *(historical citation)* <!-- doc-audit: historical-path --> | **Merge into one permissive radio-family workspace**, preserving crate names, histories, firmware targets, and provenance files. Retinue can remain the repository name. | The current sibling path links contradict the stated one-workspace goal and make one hardware acceptance span four releases. GPL-derived personalities remain downstream image/process integrations. |
 | Woodshed `audio-primitives` consumed by Hocket | **Promote to a standalone `audio-primitives` repository or a deliberately named audio-family workspace.** Do not put it in Wavicle: DSP primitives and a codec have different contracts. | It is pure `std`, product-neutral, and already has two real consumers. Hocket currently reaches into Woodshed by sibling path. |
 | Mere `register-*` microcrates | **Do not promote this donor cluster as Graphshell infrastructure.** Move live contracts to owners: layout descriptors to Scenograph, viewer selection to Inker, presentation codecs to Graphshell/Genet, app lenses/themes/knowledge to Mere. Retire islands with no callers. | `register-layout` is currently used only through `register-viewer`; `register-renderer-types` has no live consumer; several others are workspace roots rather than integrated services. |
 | `uxtree` | **Keep in Mere for now.** It is browser-shaped and depends on Inker. Extract a renderer-neutral semantic core into Meristem only after Graphshell and another app prove the same structure. | Accessibility reuse is desirable; rebranding an application projection as a wire protocol is not reuse. |
@@ -766,7 +766,7 @@ the low-power lane, landed the same week):
   portable boundary; admission belongs to the endpoint/host crate. (The same
   distinction gemot got wrong in prose — posture is about source, not the build
   graph — so state it in the manifest comment when the dep lands.)
-- **G5b — identity. LANDED 2026-07-25.** `ports/graphshell::profile`:
+- **G5b — identity. LANDED 2026-07-25.** `ports/graphshell::profile` *(historical citation)* <!-- doc-audit: historical-path -->:
   `GraphshellIdentity` loads a **user-selected** profile
   (`GRAPHSHELL_PROFILE`, defaulting to `default` — the profile the Personae
   SSH agent serves, so Graphshell speaks as the user rather than as a second
@@ -788,7 +788,7 @@ the low-power lane, landed the same week):
   another master; an unopenable vault yields no identity. The attestation test
   is `expect`-hard on Windows rather than skippable, so "the proof verifies" is
   never reported without evidence. graphshell 14 tests.
-- **G5c — admission. LANDED 2026-07-25.** `ports/graphshell::admission`: the
+- **G5c — admission. LANDED 2026-07-25.** `ports/graphshell::admission` *(historical citation)* <!-- doc-audit: historical-path -->: the
   triple `mere.graphshell` / `/services/projection` / `connect`, a
   `PROJECTION_PROTOCOL` label that rides the signed transcript, `open_session`
   (initiator) and `admit_session` (responder, returning the
@@ -810,7 +810,7 @@ the low-power lane, landed the same week):
   replayed onto a different connection fails, so admission is per-connection
   rather than per-credential. `graphshell-client` and `chirograph`
   still declare zero personae and zero notochord dependencies.
-- **G5d — carrier. LANDED 2026-07-27.** `ports/graphshell::carrier`:
+- **G5d — carrier. LANDED 2026-07-27.** `ports/graphshell::carrier` *(historical citation)* <!-- doc-audit: historical-path -->:
   `accept_projection_session` runs the full accept path before a single
   `SessionOpen` byte is read. It is Notochord **N2's second service carrier**
   (Murm's real accept path is the first), and it owns none of the machinery it
@@ -846,7 +846,7 @@ the low-power lane, landed the same week):
   last QUIC connection handle until the final frame is acknowledged. Current
   receipts: graphshell 35; mere-transport 40 plus its Notochord
   integration test.
-- **G5e — lifecycle. LANDED 2026-07-27.** `ports/graphshell::lifecycle` joins
+- **G5e — lifecycle. LANDED 2026-07-27.** `ports/graphshell::lifecycle` *(historical citation)* <!-- doc-audit: historical-path --> joins
   admitted authority to the session states the protocol already modelled.
   **No new vocabulary was needed**: `SessionStatus::{Expired, Revoked}`,
   `CachePolicy::purge_on_revocation`, and `IntentResult::Stale` were all
@@ -885,7 +885,7 @@ the low-power lane, landed the same week):
   reconstructing authority from application data.
 
 - **G5f — the two-device run. COMPLETE 2026-07-29.**
-  `ports/graphshell/src/bin/g5_peer.rs`, modelled on `mesh-peer`. **Windows
+  `ports/graphshell/src/bin/g5_peer.rs` *(historical citation)* <!-- doc-audit: historical-path -->, modelled on `mesh-peer`. **Windows
   laptop → iMac (<remote-host>, macOS 15.7.7) over p2panda/iroh QUIC on the LAN**, both
   at `0ffe8a62`, distinct identity seeds, ticket pasted between them.
   - *Granted run.* Client: `dialling f541dd2c`, `admitted`, `#1 -> opened,

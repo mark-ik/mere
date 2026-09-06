@@ -8,7 +8,7 @@ runtime into its own crate, names the physics-substrate sibling pair
 `graph-canvas` crate goes as it comes apart.
 **Related**: [composition spine](2026-05-21_mere_composition_spine.md),
 [cartography-aether seam](2026-05-29_cartography_aether_layout_seam.md),
-[genet-as-host eval](2026-05-29_genet_as_host_evaluation.md),
+[genet-as-host eval](../../archive_docs/2026-06-09_completed_plans/2026-05-29_genet_as_host_evaluation.md),
 [cartography brief](../research/2026-05-10_cartography_layer_brief.md),
 [local-intelligence research](../research/2026-05-08_local_intelligence_integration_research.md).
 
@@ -197,7 +197,7 @@ Not all at once. A workable order, each slice host-agnostic and testable:
    coupling to prove equivalence, keep the built-in as the fast path.
 3. **The `Field`/`Coupling` kernel primitive** + lifecycle (the bigger, truth-
    level slice; its own plan: the
-   [field/coupling kernel-primitive plan](../implementation_strategy/2026-05-31_field_coupling_kernel_primitive_plan.md)).
+   [field/coupling kernel-primitive plan](../../archive_docs/2026-06-09_completed_plans/2026-05-31_field_coupling_kernel_primitive_plan.md)).
    Until it lands, `aether` reads fields from an in-memory registry rather than
    the graph.
 4. **Dissolve graph-canvas**: relocate the rows in §6 as their consumers need

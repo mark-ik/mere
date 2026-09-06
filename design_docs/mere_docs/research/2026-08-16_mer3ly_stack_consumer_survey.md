@@ -28,13 +28,13 @@ Six Mere crates pinned by git rev, plus two published Genet crates from crates.i
 | `cambium` | crates.io `0.3.2` | site views serialized to static HTML |
 | `genet-scripted-dom` | crates.io `0.1.0` | scripted DOM lane |
 
-**Drift is near zero on the surfaces that matter.** The site pins mere at `8a7ede70` (2026-08-12) and mere is 112 commits ahead as of today, but exactly one of those commits touched `crates/scenograph/`, `crates/canvas/cartography/`, or `crates/canvas/arrangements/`, and it changed a single line of a design doc. The freeze is holding, and the site is live proof of it.
+**Drift is near zero on the surfaces that matter.** The site pins mere at `8a7ede70` (2026-08-12) and mere is 112 commits ahead as of today, but exactly one of those commits touched `crates/scenograph/`, `crates/canvas/cartography/`, or `crates/canvas/arrangements/` *(historical citation)* <!-- doc-audit: historical-path -->, and it changed a single line of a design doc. The freeze is holding, and the site is live proof of it.
 
 ## The two paths
 
 ### Portable path
 
-`portable_projection` (`crates/repo-graph/src/lib.rs:830`) hashes the authority JSON with SHA-256, derives `score.generation` from the first eight bytes of that digest, then builds one `ScoreItem` per node with a fixed shape: `Footprint::Circle { radius: 28.0 }`, `Representation::Glyph`, `Placement::Ordinal`, `layer: 0`, `visible: true`. `scenomise::solve` produces the scene, relations are routed as straight point pairs, and `SceneSnapshot::from_dense` seals it at `SceneEpoch(generation)`.
+`portable_projection` (`crates/repo-graph/src/lib.rs:830` *(historical citation)* <!-- doc-audit: historical-path -->) hashes the authority JSON with SHA-256, derives `score.generation` from the first eight bytes of that digest, then builds one `ScoreItem` per node with a fixed shape: `Footprint::Circle { radius: 28.0 }`, `Representation::Glyph`, `Placement::Ordinal`, `layer: 0`, `visible: true`. `scenomise::solve` produces the scene, relations are routed as straight point pairs, and `SceneSnapshot::from_dense` seals it at `SceneEpoch(generation)`.
 
 It then walks a default trace (`lib.rs:1011`): select Turnstone, move it, select the Turnstone-hosts-Mere relation, tombstone it, select Mere, fold its dependencies, expand them again. Each step is a `ProjectionStep { label, selection, diff }`, each diff chains `base` to `revision`, and `consume_portable_projection` re-validates the artifact and returns a `ProjectionReceipt` reporting score items, initial and final revision, active items and relations, picked source, and trace step count.
 
@@ -102,7 +102,7 @@ Four claims from the first pass over this site do not survive the survey.
 1. A1 is not "already shipped". The pin model exists but never reaches a score, which is a different and more useful finding.
 2. A3's premise was not falsified. The exported registry serves the live path's UI, not portable rung selection.
 3. B1 is not already served. The sandbox is not readable without JavaScript, and the accessible artifact is authority-derived and separate.
-4. `graph_layout:penrose` does exist, at `crates/canvas/arrangements/src/registry.rs:358`, as a `LayoutCapability` id distinct from the adapter's `penrose.default` projection id. The site uses the registry id directly. An earlier claim that it was absent came from a truncated grep and has been reverted in the plan and the catalog.
+4. `graph_layout:penrose` does exist, at `crates/canvas/arrangements/src/registry.rs:358` *(historical citation)* <!-- doc-audit: historical-path -->, as a `LayoutCapability` id distinct from the adapter's `penrose.default` projection id. The site uses the registry id directly. An earlier claim that it was absent came from a truncated grep and has been reverted in the plan and the catalog.
 
 ## Questions for Mark
 

@@ -3,7 +3,7 @@
 > **Repository note (2026-09-04):** Knot Editor is an independent repository,
 > consumed by Djinn and Turnstone from one immutable revision; its sources left
 > Mere under E2 of `knot-editor/design_docs/2026-09-01_knot_editor_repository_extraction_plan.md`,
-> so the `ports/knot` paths below name the layout each receipt landed against.
+> so the `ports/knot` *(historical citation)* <!-- doc-audit: historical-path --> paths below name the layout each receipt landed against.
 
 Status: implemented bounded adapter, pending an external Demarkus-client
 receipt.
@@ -42,7 +42,7 @@ Mark token.
 
 ## Surface
 
-`ports/knot/src/mark.rs` implements:
+`ports/knot/src/mark.rs` *(historical citation)* <!-- doc-audit: historical-path --> implements:
 
 - explicit `.md` export paths bound once to a native `PublicationId`;
 - owner-triggered CommonMark snapshot creation, duplicate-content no-ops,

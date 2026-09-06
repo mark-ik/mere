@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/graphshell_docs/technical_architecture/2026-04-16_middlenet_lane_architecture_spec.md`
+> - Original path: `design_docs/graphshell_docs/technical_architecture/2026-04-16_middlenet_lane_architecture_spec.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `401e2fcc`
 >
 > It is filed here as research, not as a plan and not as a statement of where
@@ -55,19 +55,19 @@ fallback.
 - [`2026-03-29_middlenet_engine_spec.md`](2026-03-29_middlenet_engine_spec.md)
   — baseline Middlenet scope, portable-engine framing, and intermediate
   document model direction
-- [`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md)
+- [`2026-03-30_protocol_modularity_and_host_capability_model.md`](2026-03-30_protocol_modularity_and_host_capability_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — host-aware degradation and protocol packaging classes
-- [`2026-02-18_universal_node_content_model.md`](2026-02-18_universal_node_content_model.md)
+- [`2026-02-18_universal_node_content_model.md`](2026-02-18_universal_node_content_model.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — node as persistent content container independent of renderer
-- [`../implementation_strategy/viewer/universal_content_model_spec.md`](../implementation_strategy/viewer/universal_content_model_spec.md)
+- [`../implementation_strategy/viewer/universal_content_model_spec.md`](../implementation_strategy/viewer/universal_content_model_spec.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — viewer routing and content selection policy
-- [`../implementation_strategy/viewer/viewer_presentation_and_fallback_spec.md`](../implementation_strategy/viewer/viewer_presentation_and_fallback_spec.md)
+- [`../implementation_strategy/viewer/viewer_presentation_and_fallback_spec.md`](../implementation_strategy/viewer/viewer_presentation_and_fallback_spec.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — fallback/degraded-state expectations
-- [`../research/2026-04-10_ui_framework_alternatives_and_graph_tree_discovery.md`](../research/2026-04-10_ui_framework_alternatives_and_graph_tree_discovery.md)
+- [`../research/2026-04-10_ui_framework_alternatives_and_graph_tree_discovery.md`](../research/2026-04-10_ui_framework_alternatives_and_graph_tree_discovery.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — vello/parley/AccessKit direction and custom-canvas strategy
-- [`../research/2026-04-14_wasm_portable_renderer_feasibility.md`](../research/2026-04-14_wasm_portable_renderer_feasibility.md)
+- [`../research/2026-04-14_wasm_portable_renderer_feasibility.md`](../research/2026-04-14_wasm_portable_renderer_feasibility.md) *(historical citation)* <!-- doc-audit: historical-link -->
   — portable renderer feasibility and host/WASM constraints
-- [`../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md`](../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md)
+- [`../../verso_docs/research/2026-04-16_smolnet_capability_model_and_scroll_alignment.md`](../../../../turnstone/design_docs/2026-04-16_smolnet_capability_model_and_scroll_alignment.md)
   — capability-model framing for smolnet protocols, Scroll's UDC alignment,
   and the recommended transport-plus-format adapter split
 

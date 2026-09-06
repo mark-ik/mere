@@ -16,8 +16,8 @@
 
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) — §5.2 (Windows + panes: "no drag-to-rearrange of panes within the window's frame yet"), §9 (accessibility action surfaces).
 - [`../research/2026-05-11_tearout_operations_brief.md`](../research/2026-05-11_tearout_operations_brief.md) — §3.2 toast UX directly intersects this brief's right-click affordance work.
-- [`../implementation_strategy/2026-05-11_typed_action_bus_plan.md`](../implementation_strategy/2026-05-11_typed_action_bus_plan.md) — every gesture in this brief routes through the bus.
-- [`../implementation_strategy/2026-05-11_node_per_tile_lineage_plan.md`](../implementation_strategy/2026-05-11_node_per_tile_lineage_plan.md) — node-per-tile semantics. Double-click semantics in this brief assume node-per-tile is settled.
+- [`../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_typed_action_bus_plan.md) — every gesture in this brief routes through the bus.
+- [`../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_node_per_tile_lineage_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-11_node_per_tile_lineage_plan.md) — node-per-tile semantics. Double-click semantics in this brief assume node-per-tile is settled.
 
 ---
 

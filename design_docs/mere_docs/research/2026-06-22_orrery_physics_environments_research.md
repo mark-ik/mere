@@ -8,8 +8,8 @@ backdrops and interactive scenes are two features; liquid wanted; a 2D / 2.5D / 
 hotswitch is welcome and may be its own plan. This doc frames the design space and code seams;
 the two features and the hotswitch each graduate to their own `implementation_strategy/` plan when
 committed.
-**Code surveyed (read-only)**: `crates/orrery/gyre` (the rapier world), `crates/platen` (scene
-paint / backdrop), `crates/orrery/aether` (fields / couplings).
+**Code surveyed (read-only)**: `crates/orrery/gyre` *(historical citation)* <!-- doc-audit: historical-path --> (the rapier world), `crates/platen` (scene
+paint / backdrop), `crates/orrery/aether` *(historical citation)* <!-- doc-audit: historical-path --> (fields / couplings).
 
 **Related**:
 

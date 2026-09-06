@@ -10,12 +10,12 @@
 
 **Related**:
 
-- [`../implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md`](../implementation_strategy/2026-05-04_cable_migration_from_verso_plan.md) — phased migration from Verso (this doc resolves the Phase 1 deliverable)
+- [`../../archive_docs/2026-06-09_pivot_superseded/2026-05-04_cable_migration_from_verso_plan.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-04_cable_migration_from_verso_plan.md) — phased migration from Verso (this doc resolves the Phase 1 deliverable)
 - [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — current naming + in-product lexicon
 - [`../../TERMINOLOGY.md`](../../TERMINOLOGY.md) — canonical terminology
-- Inherited: [`cable_coop_minichat_spec.md`](../../../../graphshell/design_docs/verso_docs/implementation_strategy/2026-03-28_cable_coop_minichat_spec.md) — Cable adoption plan (predecessor; Cable migrates from Verso to Murm per the migration plan)
-- Inherited: [`VERSO_AS_PEER.md`](../../../../graphshell/design_docs/verso_docs/technical_architecture/VERSO_AS_PEER.md) — pre-migration Verso role spec (Murm inherits the bilateral half of Verso's prior responsibilities)
-- Inherited: [`COMMS_AS_APPLETS.md`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md) — Comms applet surface family (consumes Murm + Moothold)
+- Inherited: [`cable_coop_minichat_spec.md`](../../../../graphshell/design_docs/verso_docs/implementation_strategy/2026-03-28_cable_coop_minichat_spec.md) *(historical citation)* <!-- doc-audit: historical-link --> — Cable adoption plan (predecessor; Cable migrates from Verso to Murm per the migration plan)
+- Inherited: [`VERSO_AS_PEER.md`](../../../../graphshell/design_docs/verso_docs/technical_architecture/VERSO_AS_PEER.md) *(historical citation)* <!-- doc-audit: historical-link --> — pre-migration Verso role spec (Murm inherits the bilateral half of Verso's prior responsibilities)
+- Inherited: [`COMMS_AS_APPLETS.md`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md) *(historical citation)* <!-- doc-audit: historical-link --> — Comms applet surface family (consumes Murm + Moothold)
 
 ---
 
@@ -48,7 +48,7 @@ Murm does NOT own:
 | Shell layer, host GUI, Navigator surface | [`graphshell`](https://crates.io/crates/graphshell) |
 | Composition / graph-aware layout | [`platen`](https://crates.io/crates/platen) |
 | Private local accumulated browsing memory | mnem (planned) |
-| User-facing chat panel UI / Comms applet | [`COMMS_AS_APPLETS`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md) (Graphshell-side) |
+| User-facing chat panel UI / Comms applet | [`COMMS_AS_APPLETS`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md) *(historical citation)* <!-- doc-audit: historical-link --> (Graphshell-side) |
 
 **Architectural boundary** (the rule of thumb from the migration plan):
 
@@ -160,7 +160,7 @@ Per [`feedback_spec_code_samples_illustrative_vs_implementation_ready`](<user-ho
 
 ### 4.3 Cable as the first concrete module
 
-Cable is the first concrete `BilateralProtocol` implementation in `murmuring`. Cable migrates from `graphshell/ports/verso/cable/` to `mere/crates/murmuring/src/protocols/cable/` per the migration plan Phase 2.
+Cable is the first concrete `BilateralProtocol` implementation in `murmuring`. Cable migrates from `graphshell/ports/verso/cable/` to `mere/crates/murmuring/src/protocols/cable/` *(historical citation)* <!-- doc-audit: historical-path --> per the migration plan Phase 2.
 
 Cable-specific machinery in `murmuring/src/protocols/cable/`:
 
@@ -326,7 +326,7 @@ impl Cabal {
 }
 ```
 
-Comms-applet UI (Graphshell-side, [`COMMS_AS_APPLETS`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md)) consumes Murm via this public surface. Murm does not own UI; it provides streams + send + history.
+Comms-applet UI (Graphshell-side, [`COMMS_AS_APPLETS`](../../../../graphshell/design_docs/graphshell_docs/implementation_strategy/social/comms/COMMS_AS_APPLETS.md) *(historical citation)* <!-- doc-audit: historical-link -->) consumes Murm via this public surface. Murm does not own UI; it provides streams + send + history.
 
 ---
 

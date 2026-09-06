@@ -35,6 +35,14 @@ from urllib.parse import unquote
 
 MARKDOWN_LINK = re.compile(r"(?<!!)\[[^\]]*\]\(([^)]+)\)")
 CODE_SPAN = re.compile(r"`([^`\n]+)`")
+FENCE_OPEN = re.compile(r"^[ \t]{0,3}(`{3,}|~{3,})")
+FENCE_CLOSE = re.compile(r"^[ \t]{0,3}(`+|~+)[ \t]*(?:\r?\n)?$")
+AUDIT_SUFFIX = re.compile(
+    r"[ \t]+\*\((?P<label>historical citation|planned target)\)\*[ \t]+"
+    r"(?P<comment><!-- doc-audit: (?P<kind>historical-link|historical-path|planned-link|planned-path) -->)"
+)
+HISTORICAL_COMMENT = re.compile(r"<!--[^\r\n>]*doc-audit:[^\r\n>]*-->")
+AUDIT_LABEL = re.compile(r"\*\((?:historical citation|planned target)\)\*")
 # A plan header may use a plain label, bold the word, or bold the whole label.
 # Dated and reconciled headers put their qualifier in parentheses before the
 # colon.  Keep the expression line-anchored so prose such as "the Status:"
@@ -85,10 +93,16 @@ class Report:
     memory_directory_links: list[Finding] = field(default_factory=list)
     statusless_plans: list[Finding] = field(default_factory=list)
     broken_relative_links: list[Finding] = field(default_factory=list)
+    historical_broken_relative_links: list[Finding] = field(default_factory=list)
+    planned_broken_relative_links: list[Finding] = field(default_factory=list)
     ambiguous_known_root_paths: list[Finding] = field(default_factory=list)
     ignored_known_root_patterns: list[Finding] = field(default_factory=list)
     reserved_identifier_paths: list[Finding] = field(default_factory=list)
     missing_known_root_paths: list[Finding] = field(default_factory=list)
+    historical_missing_known_root_paths: list[Finding] = field(default_factory=list)
+    planned_missing_known_root_paths: list[Finding] = field(default_factory=list)
+    invalid_historical_annotations: list[Finding] = field(default_factory=list)
+    stale_historical_annotations: list[Finding] = field(default_factory=list)
 
     def counts(self) -> dict[str, int]:
         return {
@@ -99,10 +113,16 @@ class Report:
             "memory_directory_links": len(self.memory_directory_links),
             "statusless_plans": len(self.statusless_plans),
             "broken_relative_links": len(self.broken_relative_links),
+            "historical_broken_relative_links": len(self.historical_broken_relative_links),
+            "planned_broken_relative_links": len(self.planned_broken_relative_links),
             "ambiguous_known_root_paths": len(self.ambiguous_known_root_paths),
             "ignored_known_root_patterns": len(self.ignored_known_root_patterns),
             "reserved_identifier_paths": len(self.reserved_identifier_paths),
             "missing_known_root_paths": len(self.missing_known_root_paths),
+            "historical_missing_known_root_paths": len(self.historical_missing_known_root_paths),
+            "planned_missing_known_root_paths": len(self.planned_missing_known_root_paths),
+            "invalid_historical_annotations": len(self.invalid_historical_annotations),
+            "stale_historical_annotations": len(self.stale_historical_annotations),
         }
 
     def has_findings(self) -> bool:
@@ -112,6 +132,10 @@ class Report:
             "ambiguous_known_root_paths",
             "ignored_known_root_patterns",
             "reserved_identifier_paths",
+            "historical_broken_relative_links",
+            "historical_missing_known_root_paths",
+            "planned_broken_relative_links",
+            "planned_missing_known_root_paths",
         }
         return any(value for key, value in self.counts().items() if key not in informational)
 
@@ -145,6 +169,48 @@ def normalise_target(raw: str) -> str:
 
 def markdown_targets(text: str) -> list[str]:
     return [normalise_target(match.group(1)) for match in MARKDOWN_LINK.finditer(text)]
+
+
+def citation_annotation_after(
+    text: str, offset: int
+) -> tuple[str, str, tuple[int, int], tuple[int, int]] | None:
+    """Return an exact same-line historical annotation after an occurrence."""
+    match = AUDIT_SUFFIX.match(text, offset)
+    if match is None:
+        return None
+    return match.group("label"), match.group("kind"), match.span("comment"), match.span()
+
+
+def offset_in_ranges(offset: int, ranges: list[tuple[int, int]]) -> bool:
+    return any(start <= offset < end for start, end in ranges)
+
+
+def fenced_code_ranges(text: str) -> list[tuple[int, int]]:
+    """Return CommonMark-style fenced blocks, including longer closing fences."""
+    ranges: list[tuple[int, int]] = []
+    active_start: int | None = None
+    active_char = ""
+    active_length = 0
+    offset = 0
+    for line in text.splitlines(keepends=True):
+        if active_start is None:
+            opened = FENCE_OPEN.match(line)
+            if opened is not None:
+                token = opened.group(1)
+                active_start = offset
+                active_char = token[0]
+                active_length = len(token)
+        else:
+            closed = FENCE_CLOSE.match(line)
+            if closed is not None:
+                token = closed.group(1)
+                if token[0] == active_char and len(token) >= active_length:
+                    ranges.append((active_start, offset + len(line)))
+                    active_start = None
+        offset += len(line)
+    if active_start is not None:
+        ranges.append((active_start, len(text)))
+    return ranges
 
 
 def is_external_target(target: str) -> bool:
@@ -282,20 +348,59 @@ def audit(repo_root: Path) -> Report:
     workspace_root = repo_root.parent
     for path in docs:
         text = read_text(path)
-        for target in markdown_targets(text):
+        fenced_ranges = fenced_code_ranges(text)
+        inline_code_ranges = [
+            match.span() for match in CODE_SPAN.finditer(text)
+            if not offset_in_ranges(match.start(), fenced_ranges)
+        ]
+        markdown_link_ranges = [
+            match.span() for match in MARKDOWN_LINK.finditer(text)
+            if not offset_in_ranges(match.start(), fenced_ranges + inline_code_ranges)
+        ]
+        consumed_annotations: set[tuple[int, int]] = set()
+        consumed_annotation_ranges: list[tuple[int, int]] = []
+        for match in MARKDOWN_LINK.finditer(text):
+            if offset_in_ranges(match.start(), fenced_ranges + inline_code_ranges):
+                continue
+            target = normalise_target(match.group(1))
             if is_external_target(target):
                 continue
             if is_memory_target(target):
                 report.memory_directory_links.append(finding(path, docs_root, target, "link enters a private memory directory"))
                 continue
             resolved = safe_resolve(path.parent, target)
-            if not resolved.exists():
+            annotation = citation_annotation_after(text, match.end())
+            if annotation is not None:
+                label, kind, marker_span, annotation_span = annotation
+                consumed_annotations.add(marker_span)
+                consumed_annotation_ranges.append(annotation_span)
+                valid_kind = "historical-link" if label == "historical citation" else "planned-link"
+                if kind != valid_kind:
+                    report.invalid_historical_annotations.append(
+                        finding(path, docs_root, target, f"relative link has a mismatched {kind} annotation")
+                    )
+                elif resolved.exists():
+                    report.stale_historical_annotations.append(
+                        finding(path, docs_root, target, "annotated relative link now resolves")
+                    )
+                elif kind == "historical-link":
+                    report.historical_broken_relative_links.append(
+                        finding(path, docs_root, target, "unresolved relative link is explicitly historical")
+                    )
+                else:
+                    report.planned_broken_relative_links.append(
+                        finding(path, docs_root, target, "unresolved relative link is an explicit planned target")
+                    )
+            elif not resolved.exists():
                 report.broken_relative_links.append(finding(path, docs_root, target, "relative link target does not exist"))
 
         if is_plan(path, text) and STATUS_LINE.search(text) is None:
             report.statusless_plans.append(finding(path, docs_root, path.name, "plan has no Status: line"))
 
-        for span in CODE_SPAN.findall(text):
+        for match in CODE_SPAN.finditer(text):
+            if offset_in_ranges(match.start(), fenced_ranges + markdown_link_ranges):
+                continue
+            span = match.group(1)
             excluded = excluded_known_root_candidate(span)
             if excluded is not None:
                 candidate, category = excluded
@@ -307,10 +412,53 @@ def audit(repo_root: Path) -> Report:
             if candidate is None:
                 continue
             resolved = resolve_known_root(candidate, repo_root, workspace_root)
-            if resolved is not None and not resolved.exists():
+            annotation = citation_annotation_after(text, match.end())
+            if annotation is not None:
+                label, kind, marker_span, annotation_span = annotation
+                consumed_annotations.add(marker_span)
+                consumed_annotation_ranges.append(annotation_span)
+                valid_kind = "historical-path" if label == "historical citation" else "planned-path"
+                if kind != valid_kind:
+                    report.invalid_historical_annotations.append(
+                        finding(path, docs_root, candidate, f"known-root path has a mismatched {kind} annotation")
+                    )
+                elif resolved is not None and resolved.exists():
+                    report.stale_historical_annotations.append(
+                        finding(path, docs_root, candidate, "annotated known-root path now resolves")
+                    )
+                elif resolved is not None and kind == "historical-path":
+                    report.historical_missing_known_root_paths.append(
+                        finding(path, docs_root, candidate, f"unresolved known-root path is explicitly historical: {resolved}")
+                    )
+                elif resolved is not None:
+                    report.planned_missing_known_root_paths.append(
+                        finding(path, docs_root, candidate, f"unresolved known-root path is an explicit planned target: {resolved}")
+                    )
+            elif resolved is not None and not resolved.exists():
                 report.missing_known_root_paths.append(
                     finding(path, docs_root, candidate, f"resolved path does not exist: {resolved}")
                 )
+
+        invalid_annotation_lines: set[int] = set()
+        for marker in HISTORICAL_COMMENT.finditer(text):
+            if offset_in_ranges(marker.start(), fenced_ranges + inline_code_ranges):
+                continue
+            if marker.span() not in consumed_annotations:
+                invalid_annotation_lines.add(text.rfind("\n", 0, marker.start()) + 1)
+                report.invalid_historical_annotations.append(
+                    finding(path, docs_root, marker.group(0), "historical annotation is malformed, detached, or does not follow an audited citation")
+                )
+        for label in AUDIT_LABEL.finditer(text):
+            if offset_in_ranges(label.start(), fenced_ranges + inline_code_ranges):
+                continue
+            if offset_in_ranges(label.start(), consumed_annotation_ranges):
+                continue
+            line_start = text.rfind("\n", 0, label.start()) + 1
+            if line_start in invalid_annotation_lines:
+                continue
+            report.invalid_historical_annotations.append(
+                finding(path, docs_root, label.group(0), "historical citation label has no valid same-line audit annotation")
+            )
     return report
 
 
@@ -330,10 +478,16 @@ def print_report(report: Report, json_output: bool) -> None:
         "memory_directory_links",
         "statusless_plans",
         "broken_relative_links",
+        "historical_broken_relative_links",
+        "planned_broken_relative_links",
         "ambiguous_known_root_paths",
         "ignored_known_root_patterns",
         "reserved_identifier_paths",
         "missing_known_root_paths",
+        "historical_missing_known_root_paths",
+        "planned_missing_known_root_paths",
+        "invalid_historical_annotations",
+        "stale_historical_annotations",
     ):
         findings: list[Finding] = getattr(report, category)
         for item in findings[:12]:
@@ -351,7 +505,29 @@ def write_fixture(root: Path, defective: bool) -> None:
         (docs / "orphan.md").write_text("# Orphan\n", encoding="utf-8")
         (docs / "statusless_plan.md").write_text("# Statusless Plan\n", encoding="utf-8")
         (docs / "bad_links.md").write_text(
-            "# Links\n\n**Status:** current\n\n[private](C:/Users/mark_/.codex/memories/secret.md)\n[user home](<user-home>\\.claude\\memory\\note.md)\n[prose](memory)\n[missing](missing.md)\n`crates/missing/src/lib.rs`\n`mere/crates/missing/src/lib.rs`\n`src/missing.rs`\n`crates/*/design_docs/`\n`mere/cable/v1`\n",
+            "# Links\n\n**Status:** current\n\n"
+            "[private](C:/Users/mark_/.codex/memories/secret.md)\n"
+            "[user home](<user-home>\\.claude\\memory\\note.md)\n"
+            "[prose](memory)\n"
+            "[missing](missing.md)\n"
+            "[old link](old.md) *(historical citation)* <!-- doc-audit: historical-link -->\n"
+            "[`crates/old-label`](old-label.md) *(historical citation)* <!-- doc-audit: historical-link -->\n"
+            "[planned link](future.md) *(planned target)* <!-- doc-audit: planned-link -->\n"
+            "[wrong kind](wrong.md) *(historical citation)* <!-- doc-audit: historical-path -->\n"
+            "[live marked](active_plan.md) *(historical citation)* <!-- doc-audit: historical-link -->\n"
+            "[detached](detached.md)\n*(historical citation)* <!-- doc-audit: historical-link -->\n"
+            "`crates/missing/src/lib.rs`\n"
+            "`mere/crates/missing/src/lib.rs`\n"
+            "`crates/old/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-path -->\n"
+            "`crates/future/src/lib.rs` *(planned target)* <!-- doc-audit: planned-path -->\n"
+            "`crates/wrong/src/lib.rs` *(historical citation)* <!-- doc-audit: historical-link -->\n"
+            "`src/missing.rs`\n"
+            "`crates/*/design_docs/`\n"
+            "`mere/cable/v1`\n"
+            "`[syntax](example.md) *(historical citation)* <!-- doc-audit: historical-link -->`\n"
+            "```md\n[fenced](example.md) *(historical citation)* <!-- doc-audit: historical-link -->\n````\n"
+            "- nested link\n    [nested](nested.md)\n"
+            "[label only](label-only.md) *(historical citation)*\n",
             encoding="utf-8",
         )
         (docs / "DOC_README.md").write_text(
@@ -401,10 +577,16 @@ def run_self_test() -> None:
             "memory_directory_links",
             "statusless_plans",
             "broken_relative_links",
+            "historical_broken_relative_links",
+            "planned_broken_relative_links",
             "ambiguous_known_root_paths",
             "ignored_known_root_patterns",
             "reserved_identifier_paths",
             "missing_known_root_paths",
+            "historical_missing_known_root_paths",
+            "planned_missing_known_root_paths",
+            "invalid_historical_annotations",
+            "stale_historical_annotations",
         }
         missing = [key for key in expected if defective.counts()[key] == 0]
         if missing:
@@ -428,6 +610,30 @@ def run_self_test() -> None:
         for concrete in ("crates/missing/src/lib.rs", "mere/crates/missing/src/lib.rs"):
             if concrete not in missing_subjects:
                 raise AssertionError(f"concrete missing path was not detected: {concrete}")
+
+        historical_links = {finding.subject for finding in defective.historical_broken_relative_links}
+        if historical_links != {"old.md", "old-label.md"}:
+            raise AssertionError(f"historical link annotation was not exact: {sorted(historical_links)}")
+        historical_paths = {finding.subject for finding in defective.historical_missing_known_root_paths}
+        if historical_paths != {"crates/old/src/lib.rs"}:
+            raise AssertionError(f"historical path annotation was not exact: {sorted(historical_paths)}")
+        if "old.md" in {finding.subject for finding in defective.broken_relative_links}:
+            raise AssertionError("accepted historical link remained in the failing bucket")
+        if "crates/old/src/lib.rs" in missing_subjects:
+            raise AssertionError("accepted historical path remained in the failing bucket")
+        planned_links = {finding.subject for finding in defective.planned_broken_relative_links}
+        if planned_links != {"future.md"}:
+            raise AssertionError(f"planned link annotation was not exact: {sorted(planned_links)}")
+        planned_paths = {finding.subject for finding in defective.planned_missing_known_root_paths}
+        if planned_paths != {"crates/future/src/lib.rs"}:
+            raise AssertionError(f"planned path annotation was not exact: {sorted(planned_paths)}")
+        if len(defective.invalid_historical_annotations) != 4:
+            raise AssertionError(
+                "historical annotation controls produced an unexpected invalid count: "
+                f"{len(defective.invalid_historical_annotations)}"
+            )
+        if len(defective.stale_historical_annotations) != 1:
+            raise AssertionError("live historical annotation was not reported exactly once")
 
         clean_root = Path(temp) / "clean" / "repos" / "mere"
         write_fixture(clean_root, defective=False)

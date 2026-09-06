@@ -17,7 +17,7 @@ scheme to let one *scenario* run either way.
 
 Meerkat is driven under automation two ways, and they verify **different layers**:
 
-1. **In-process `agent_harness`** (`crates/meerkat/src/agent_harness.rs`, `#[cfg(any(test,
+1. **In-process `agent_harness`** (`crates/meerkat/src/agent_harness.rs` *(historical citation)* <!-- doc-audit: historical-path -->, `#[cfg(any(test,
    feature = "agent-harness"))]`). Constructs a real `Shell`, drives it by **registry
    command / context ids** (`agent_invoke(id)` → `agent_invoke_command` /
    `agent_invoke_context`, plus `agent_select_node_by_url`, `agent_set_theme`, synthetic
@@ -99,7 +99,7 @@ The headed layer's real fragility is **OS synthetic input** (focus races, timing
 that also delivers the unification: let the app **drive itself** from a scenario file instead
 of receiving OS input. This shipped 2026-07-08.
 
-- **The vocabulary** (`crates/meerkat/src/scenario/mod.rs`): a line-oriented format over the
+- **The vocabulary** (`crates/meerkat/src/scenario/mod.rs` *(historical citation)* <!-- doc-audit: historical-path -->): a line-oriented format over the
   registry-id space plus the host verbs, the two non-registry-flow verbs, and the harness
   markers a driven session needs — `invoke <id>`, `navigate <url>`, `key <chord>`,
   `theme <id>`, `spawn`, `capture <name>`, `settle [<frames>]`, `assert windows <op> <n>`,
@@ -132,7 +132,7 @@ of receiving OS input. This shipped 2026-07-08.
   PNGs. No synthetic input in the path.
 
 Multi-window was the immediate motivator, and it verified clean: the shipped
-`scenarios/multi_window.scn` self-drives `capture primary` -> `invoke roster` (roster pane
+`crates/meerkat/scenarios/multi_window.scn` *(historical citation)* <!-- doc-audit: historical-path --> self-drives `capture primary` -> `invoke roster` (roster pane
 opens on the primary) -> `spawn` -> `assert windows == 2` (PASS, two live OS windows) ->
 `capture leaf @1` (the slim leaf), all from one `GenetMultiRunner`, no OS input, no focus
 race.
@@ -149,7 +149,7 @@ race.
    test DB, capture working dirs, locks) was purged.
 2. **Landed 2026-07-08**: the `MEERKAT_SCENARIO` self-drive mode + the shared scenario format
    (above); the `mk-harness` `Run-Scenario` launch+collect; two seed scenarios
-   (`crates/meerkat/scenarios/multi_window.scn`, `settings.scn`), both verified headed
+   (`crates/meerkat/scenarios/multi_window.scn` *(historical citation)* <!-- doc-audit: historical-path -->, `settings.scn`), both verified headed
    (`RESULT ok`).
 3. **Landed 2026-07-08**: the two verbs for flows outside the registry, so the vocabulary now
    covers the whole session, not just registry commands:

@@ -8,8 +8,8 @@ sprite-alpha hull collider, P3/P4 done) and whose representation axis this plan 
 arrangement half already spun out to
 [graph_signals_layer_plan](../../archive_docs/2026-08-20_completed_plans/2026-06-22_graph_signals_layer_plan.md) (Decision 7). This plan
 collects the still-open representation follow-ons so they are not orphaned.
-**Code**: `crates/orrery/orrery` (the representation + sprite + hull maps, `node_collider`),
-`crates/orrery/gyre` (`NodeCollider`, the body-spawn material params), `crates/meerkat`
+**Code**: `crates/orrery/orrery` *(historical citation)* <!-- doc-audit: historical-path --> (the representation + sprite + hull maps, `node_collider`),
+`crates/orrery/gyre` *(historical citation)* <!-- doc-audit: historical-path --> (`NodeCollider`, the body-spawn material params), `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path -->
 (`window_view.rs` face pick, `swatch.rs` + `input.rs` the shape editor).
 
 ## Why this plan exists
@@ -30,15 +30,15 @@ predecessor plan; restated here so the vocabulary holds.)
 The data model already keeps texture and shape in separate maps, but two sites collapse them
 into one mutually-exclusive `Representation` choice:
 
-- **`Representation`** ([orrery types.rs](../../../crates/orrery/orrery/src/types.rs)) is one axis:
+- **`Representation`** ([orrery types.rs](../../../crates/orrery/orrery/src/types.rs) *(historical citation)* <!-- doc-audit: historical-link -->) is one axis:
   `Tile` (favicon + caption), `Shape` (bare content-typed face, no texture), `Sprite` (an
   imported image fills the face). `NodeShape` (Square / Rounded / Circle) is a separate
   content-type silhouette axis.
-- **Face pick** ([window_view.rs](../../../crates/meerkat/src/window_view.rs) `gnode_view`):
+- **Face pick** ([window_view.rs](../../../crates/meerkat/src/window_view.rs) *(historical citation)* <!-- doc-audit: historical-link --> `gnode_view`):
   `match representation { Sprite => sprite, Tile => favicon, Shape => None }`. A sprite
   *categorically replaces* the favicon. There is no way to have a custom-bodied node that still
   shows a favicon, nor a sprite face on the default body.
-- **Collider pick** ([orrery lib.rs](../../../crates/orrery/orrery/src/lib.rs) `node_collider`):
+- **Collider pick** ([orrery lib.rs](../../../crates/orrery/orrery/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link --> `node_collider`):
   a custom hull is consulted **only when the representation is `Sprite`**; otherwise the collider
   is the content-type silhouette primitive. So a tailored body (a hull) is reachable only by
   importing a sprite. This is the coupling Mark named: "only sprites have meaningfully tailored
@@ -135,7 +135,7 @@ This is mostly *wiring already-built substrate into the form hook*, not new mech
 substrate owners are named; this plan owns the Representation variant + dispatch.
 
 - **In-scene sprites + custom bodies.** Today sprites render on the focused orrery's cards only;
-  secondary panes still draw the tile form ([orrery frame.rs](../../../crates/orrery/orrery/src/frame.rs)
+   secondary panes still draw the tile form ([orrery frame.rs](../../../crates/orrery/orrery/src/frame.rs) *(historical citation)* <!-- doc-audit: historical-link -->
   renders favicon RGBA, not sprite data). Bring sprite / custom-body rendering to the in-scene
   path so secondary panes match.
 - **The interactive node-body form (a live surface as a body).** Re-verified 2026-06-23: the live
@@ -231,13 +231,13 @@ fidelity) = a directly-authored hull, convex now, concave/compound as the B3 fid
   not new machinery.
 - **The interactive node-body form is built, not blocked.** Scry does off-window WebView2 capture
   -> wgpu import -> `compose_external_texture` under chrome, with mouse / keyboard / IME forwarded
-  by API, verified live in pelt tiles ([scrying_host.rs](../../../crates/meerkat/src/scrying_host.rs),
-  [render.rs](../../../crates/meerkat/src/render.rs)). The `<external-texture>` element composites
+   by API, verified live in pelt tiles ([scrying_host.rs](../../../crates/meerkat/src/scrying_host.rs) *(historical citation)* <!-- doc-audit: historical-link -->,
+   [render.rs](../../../crates/meerkat/src/render.rs) *(historical citation)* <!-- doc-audit: historical-link -->). The `<external-texture>` element composites
   but does not yet forward input (the one real gap, tearout C2). The swatch demonstrates an
   interactive node-scoped chrome-DOM surface today.
 - **Scripting substrate.** Rhai was dropped as a general first-party placement (2026-06-10,
   scripting map = Rust + JS), but is retained narrowly for knot-block eval and field-region rules
-  ([aether rhai_bindings.rs](../../../crates/orrery/aether/src/rhai_bindings.rs)). A decorative
+   ([aether rhai_bindings.rs](../../../crates/orrery/aether/src/rhai_bindings.rs) *(historical citation)* <!-- doc-audit: historical-link -->). A decorative
   scripted node face needs no rhai (DOM substrate); a behavioral one is field-regions.
 
 ## Progress

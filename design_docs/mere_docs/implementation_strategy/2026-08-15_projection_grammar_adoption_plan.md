@@ -43,7 +43,7 @@ alias. Its structural AccessKit projection lives at
 `workbench` package is retired. Mere and Graphshell consume Genet's reusable `workbench` package
 at immutable revision `eff0cb6df4834ecce9ac552a055c1c459befa7c3`. The component boundary and
 remaining headed-host receipts are in
-`genet/design_docs/2026-08-31_workbench_component_plan.md`.
+`genet/design_docs/2026-08-31_workbench_component_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 The report reviewed the catalog against eleven external systems (Vega-Lite,
 Draco, SetCoLa, Gemini, GoTree, ATOM; then Mosaic, Gosling, Penrose, Bluefish,
@@ -78,7 +78,7 @@ in production.
 ## Findings
 
 What transfers, from where, to where. Landing sites verified against the tree
-2026-08-15 (score shape read from `crates/scenograph/sceno/src/score.rs`;
+2026-08-15 (score shape read from `crates/scenograph/sceno/src/score.rs` *(historical citation)* <!-- doc-audit: historical-path -->;
 0.0.3 release rulings from the release plan; genet components listed from
 `repos/genet/components/`).
 
@@ -406,7 +406,7 @@ forcing consumer, which is what this target asked for.
 Cambium is where scenes meet users: `cambium-genet-winit-host` is the
 single-root host, woodshed then signalman its consumers, and swatches are the
 agreed cross-product graph-view contract. Cambium doc updates land in
-`genet/components/cambium/docs/` when a slice opens.
+`genet/components/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path --> when a slice opens.
 
 **C1. Satisfaction state in host chrome - LANDED 2026-08-16.**
 Context: A1's scene-side record is only honest if a user can see it.
@@ -599,7 +599,7 @@ is raised in Progress for Mark.
   from the tree and rewrote the note around `PenroseAdapter` / `penrose.default`. That
   was wrong: the claim came from a grep truncated by `head -20`. Both ids are real and
   distinct, `graph_layout:penrose` being the `LayoutCapability` registry id
-  (`crates/canvas/arrangements/src/registry.rs:358`) and `penrose.default` the cartography
+   (`crates/canvas/arrangements/src/registry.rs:358` *(historical citation)* <!-- doc-audit: historical-path -->) and `penrose.default` the cartography
   adapter's projection id. Plan text and catalog note restored to the registry id.
 - 2026-08-16: **mer3ly ruled authority-grade; A6 founded.** Survey first
   (`../research/2026-08-16_mer3ly_stack_consumer_survey.md`), then Mark's
@@ -1069,7 +1069,7 @@ is raised in Progress for Mark.
   heterogeneous consumer, but it is not itself A5's named portable projection
   proof; A5 still needs a named proof consumer and its per-proof evidence. The
   component follows the component seam in
-  `genet/design_docs/2026-08-31_workbench_component_plan.md`.
+   `genet/design_docs/2026-08-31_workbench_component_plan.md` *(historical citation)* <!-- doc-audit: historical-path -->.
 - 2026-09-01: **C4a landed; A3 stage two tested against it and the gate
   sharpened.** Mere `d10e04da` serves a live Graphshell projection to a
   browser-shaped WebRTC peer (admitted by Notochord, sans-I/O `SessionCore`

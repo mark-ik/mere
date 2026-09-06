@@ -8,9 +8,9 @@ lever, and the research's two features (living backdrop, interactive scene) plus
 dimensional modes are owned by the
 [isometric orrery camera plan](2026-06-22_isometric_orrery_camera_plan.md); this plan is the scene
 *content and physics*, that one is the *view*.
-**Code**: `crates/orrery/gyre` (the `Simulation`; scene bodies are the gap), `crates/orrery/orrery`
-(`frame.rs` paint + the scene paint pass), `crates/platen/platen/src/scene_paint.rs` (the ground
-layer), `crates/meerkat` (the tangibility command + scene picker), optional new `crates/orrery/scene`
+**Code**: `crates/orrery/gyre` *(historical citation)* <!-- doc-audit: historical-path --> (the `Simulation`; scene bodies are the gap), `crates/orrery/orrery` *(historical citation)* <!-- doc-audit: historical-path -->
+(`frame.rs` paint + the scene paint pass), `crates/canvas/canvas/src/scene_paint.rs` (the ground
+layer), `crates/meerkat` *(historical citation)* <!-- doc-audit: historical-path --> (the tangibility command + scene picker), optional new `crates/orrery/scene` *(planned target)* <!-- doc-audit: planned-path -->
 (scene format + transplanted scenes), `salva2d` (liquid).
 
 **Related**:
@@ -208,7 +208,7 @@ within budget.
 - **Where the scene world lives.** Scene bodies in the node `Simulation` (one world, simplest,
   Mark's same-world ask) vs a sibling `Simulation` for separation. Lean one world (the ask), with
   collision groups keeping the layout clean.
-- **Scene crate vs in-orrery.** A new `crates/orrery/scene` for the `SceneSpec` + transplanted
+- **Scene crate vs in-orrery.** A new `crates/orrery/scene` *(planned target)* <!-- doc-audit: planned-path --> for the `SceneSpec` + transplanted
   scenes, or a module in `orrery`? Lean a small crate so scenes are shareable and testable headless.
 - **Tangibility default per feature.** Backdrop intangible, interactive scene tangible? Confirm, and
   whether the lever is per-node, global, or both (the mechanism supports all).

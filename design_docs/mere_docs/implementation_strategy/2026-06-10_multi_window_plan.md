@@ -16,7 +16,7 @@ now the *current* state, not the target. The
 names the next architecture: one runner, one app state, one forest dom, windows as
 lenses; the chrome mirroring and spawn-time chip seeding this plan's machinery
 required become the thing to delete.
-**Related**: [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) (the leaf/branch/fork model this implements), [multi-graph activation plan](2026-06-09_multi_graph_activation_plan.md) (MG6 lists this; far-B and multi-window share the per-window-view-over-shared-graph split), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window). Code: `crates/meerkat/`, `crates/system/session-runtime/`, `crates/shell/frame/`.
+**Related**: [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) (the leaf/branch/fork model this implements), [multi-graph activation plan](2026-06-09_multi_graph_activation_plan.md) (MG6 lists this; far-B and multi-window share the per-window-view-over-shared-graph split), [peripheral panes architecture](../technical_architecture/2026-06-06_peripheral_panes_architecture.md) (panes are per-window). Code: `crates/meerkat/` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/system/session-runtime/` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/shell/frame/` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 Drag a pane or tile out of its window into a new OS window that shares the backing
 graph + session state. The destination is the tear-out brief's trichotomy — **leaf**
@@ -32,10 +32,10 @@ multi-graph plan referenced.
 ## Findings
 
 **The host is a single-window god-struct.** `App` *is* the winit
-`ApplicationHandler` ([app_handler.rs](../../../crates/meerkat/src/app_handler.rs)):
+`ApplicationHandler` ([app_handler.rs](../../../crates/meerkat/src/app_handler.rs) *(historical citation)* <!-- doc-audit: historical-link -->):
 it holds one `window: Option<Arc<Window>>`, one `host: SurfaceHost`, and
 `window_event` early-returns unless the event's `WindowId` matches that one window.
-The `App` struct ([main.rs](../../../crates/meerkat/src/main.rs)) carries ~80 fields
+The `App` struct ([main.rs](../../../crates/meerkat/src/main.rs) *(historical citation)* <!-- doc-audit: historical-link -->) carries ~80 fields
 that mix two concerns:
 
 - **Shared session state** (one per app): the graph (today inside `orrery`), the
@@ -479,7 +479,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   (second shared window) → MW4 (leaf tear-out) → MW5 (branch/fork/toast) → MW6 (orrery
   split, meets far-B). Supersedes the never-written `2026-06-04_multi_window_plan.md`.
 - 2026-06-10: **MW1 begun — first cluster carved.** New
-  [window_view.rs](../../../crates/meerkat/src/window_view.rs) holds `WindowView`; the
+[window_view.rs](../../../crates/meerkat/src/window_view.rs) *(historical citation)* <!-- doc-audit: historical-link --> holds `WindowView`; the
   9 per-frame **hit-rect caches** (switcher rows / close / add, roster rows, apparatus
   buttons, gloss nodes, tile rects, content rects, close-button rects) moved off the
   `App` god-struct into `App.view`. These are pure view geometry (rebuilt each render,
@@ -559,7 +559,7 @@ primary window's camera, and far-B leaf coexistence falls out of the same regist
   `workbench_dom`, `workbench_runner`). The runners are `!Default` (a genet document
   authority can't be conjured), so this **ends the derive-`Default` era**: `WindowView`
   now has an explicit [`WindowView::new(dom, runner, workbench, workbench_dom,
-  workbench_runner)`](../../../crates/meerkat/src/window_view.rs) over a fresh runner pair,
+workbench_runner)`](../../../crates/meerkat/src/window_view.rs) *(historical citation)* <!-- doc-audit: historical-link --> over a fresh runner pair,
   which is exactly how a second window will be minted over the same shared session.
   Collision-aware edits throughout: `self.host`/`self.host_text`,
   `self.toolbar_h`/`self.toolbar_height()`, `self.window`/`self.window_control()`, and

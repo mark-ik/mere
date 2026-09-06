@@ -65,8 +65,8 @@ purity rule and host-composition target are retired.
    invited exchange whose identity comes from its participants. A moot is a
    durable governed space whose identity survives membership changes. Member
    count does not select the layer.
-8. **Promotion follows the corrected shape.** `repos/murm` becomes a
-   multi-crate peer-exchange library. `repos/moot` becomes a domain library
+8. **Promotion follows the corrected shape.** `repos/murm` *(historical citation)* <!-- doc-audit: historical-path --> becomes a
+   multi-crate peer-exchange library. `repos/moot` *(historical citation)* <!-- doc-audit: historical-path --> becomes a domain library
    over `murm-replication`. Mere re-bases onto the promoted libraries only
    after their standalone tests pass.
 
@@ -459,8 +459,8 @@ Done when:
 [repo consolidation ruling](2026-07-23_repo_consolidation_plan.md) settled that
 Mere is the platform and its extracted families stay its components, with the
 bar for a separate repository being coherent identity apart from the six
-primaries. It withdraws the murm/moot promotion by name. `repos/murm` and
-`repos/moot` will not be founded, so the standalone-clone done-conditions
+primaries. It withdraws the murm/moot promotion by name. `repos/murm` *(historical citation)* <!-- doc-audit: historical-path --> and
+`repos/moot` *(historical citation)* <!-- doc-audit: historical-path --> will not be founded, so the standalone-clone done-conditions
 below describe repositories that will never exist.
 
 Marked here rather than deleted because Phases A through F were sequenced
@@ -472,8 +472,8 @@ requirements now: **Mere builds offline without peer features**, and
 The original text, for the record:
 
 > Promote only after Phases A through F establish the public seams:
-> `repos/murm` (peer transport, `murm-replication`, direct exchange);
-> `repos/moot` (governed-space domain over the branch-tracked Murm
+> `repos/murm` *(historical citation)* <!-- doc-audit: historical-path --> (peer transport, `murm-replication`, direct exchange);
+> `repos/moot` *(historical citation)* <!-- doc-audit: historical-path --> (governed-space domain over the branch-tracked Murm
 > dependency); Mere (optional projection adapters, peer dependencies absent
 > from its default core); Turnstone (direct dependencies on Mere, Murm, Moot,
 > Personae, and Serval). Done when fresh standalone clones build and test,

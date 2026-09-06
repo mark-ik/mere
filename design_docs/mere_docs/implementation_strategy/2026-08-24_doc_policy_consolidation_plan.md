@@ -1,17 +1,15 @@
 # Doc Policy Consolidation Plan — one canonical core, facade-collapsed areas, spec docs repatriated
 
 **Date**: 2026-08-24
-**Status**: **reopened 2026-09-02 for phase D, the active-tree audit.** A, B
-and C landed 2026-08-24 and stay closed. D1 (mechanical pass) and D2
-(judgment pass over all 281 active docs) complete 2026-09-02, with a depth
-re-pass of batches 03–06 in progress under decision 12; D4 (judgment report)
-delivered the same day, four class rulings taken (decisions 9–12), item-level
-escalations open; D3 was remeasured on the live tree 2026-09-04 with a restored,
-self-testing audit script. Its safe 2026-09-05 disposition and exact-link slices
-are landed, but the remaining findings still require disposition against D3's
-exit condition. Decisions taken by Mark 2026-08-24 (four questions) and
-2026-09-02 (four more), both recorded in §Decisions. Phases A and B were
-mere-local; phase C touched smolweb and genet; phase D is mere-local.
+**Status**: **D3 complete 2026-09-06; phase D remains open for D2 coverage of
+16 documents added after the 281-document judgment snapshot.** A, B and C
+landed 2026-08-24. D1, the original D2 judgment pass and depth re-pass, and D4
+completed 2026-09-02. D3 closed 2026-09-06 with the repository's self-testing
+audit at zero failing findings; intentional unresolved evidence and committed
+future targets now carry exact occurrence-level annotations rather than
+weakening an authoritative document with a whole-file historical label.
+Decisions taken by Mark 2026-08-24 and 2026-09-02 remain recorded in
+§Decisions.
 
 **Committed 2026-08-24** in twelve repos: mere (swept by a concurrent session
 in `db9c613c`), smolweb, mesocosm, woodshed, and the eight policy-only repos.
@@ -120,7 +118,7 @@ lineages plus mere's nine principles**, not a copy of any existing file.
 ### Three area roots are orphaned
 
 `inker_docs/` (1 doc), `nematic_docs/` (7), `verso_docs/` (2) describe crates
-that no longer live in mere. `crates/inker`, `crates/nematic` and `crates/verso`
+that no longer live in mere. `crates/inker`, `crates/nematic` and `crates/verso` *(historical citation)* <!-- doc-audit: historical-path -->
 are all absent; the code is now `genet/components/{inker,nematic,verso-tile}`.
 
 ### 18 of 20 member-crate docs are invisible to the canonical index
@@ -132,15 +130,15 @@ the actual argument for phase B; ease of access is secondary.
 
 | Directory | Docs | Facade member? |
 |---|---|---|
-| `crates/armillary/design_docs` | 1 | no — standalone crate |
-| `crates/dramatis/gaz/design_docs` | 1 | yes |
-| `crates/dramatis/personae/design_docs` | 3 | yes |
-| `crates/eidetic/chartulary/design_docs` | 3 | yes |
-| `crates/eidetic/codicil/design_docs` | 1 | yes |
-| `crates/eidetic/muniment/design_docs` | 2 | yes |
-| `crates/eidetic/scholia/design_docs` | 1 | yes |
-| `crates/intel/esp/design_docs` | 6 | yes (2 subdirs) |
-| `crates/scenograph/design_docs` | 2 | no — already facade-level |
+| `crates/armillary/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 1 | no — standalone crate |
+| `crates/dramatis/gaz/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 1 | yes |
+| `crates/dramatis/personae/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 3 | yes |
+| `crates/eidetic/chartulary/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 3 | yes |
+| `crates/eidetic/codicil/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 1 | yes |
+| `crates/eidetic/muniment/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 2 | yes |
+| `crates/eidetic/scholia/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 1 | yes |
+| `crates/intel/esp/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 6 | yes (2 subdirs) |
+| `crates/scenograph/design_docs` *(historical citation)* <!-- doc-audit: historical-path --> | 2 | no — already facade-level |
 
 `eidetic` is double-homed: a central `eidetic_docs/` (3 docs) *and* four member
 crates (7 docs). Decision 2 resolves this toward the central root.
@@ -256,10 +254,13 @@ docs at `bcb222ce`; `archive_docs/` excluded by design).
 
 **Done when**: D1 numbers are recorded with method and blind spots; every
 active doc has a D2 block in the aggregated record; the D1 checker re-run
-after D3 reports zero orphans, zero memory-directory links, zero Status-less
-plans, and every remaining broken link or missing path sits in a doc that
-marks itself historical or in `archive_docs/`; D4 delivered to Mark with each
-item's evidence.
+after D3 reports zero orphans, ghosts, memory-directory links, Status-less
+plans, unmarked broken relative links, unmarked missing known-root paths, and
+invalid or stale citation annotations. `archive_docs/` remains excluded. Any
+unresolved active-tree reference is informational only and has the exact
+same-line historical-citation or planned-target marker defined by Mere's local
+addendum. D4 is delivered to
+Mark with each item's evidence.
 
 ## Progress
 
@@ -280,7 +281,7 @@ item's evidence.
   caused a real error: the old policies never said **where**
   `PROJECT_DESCRIPTION.md` lives. The initial survey looked at repo roots,
   found none, and concluded no repo had one — wrong, since all five slim repos
-  keep it at `design_docs/PROJECT_DESCRIPTION.md`. Core §7 now names the path
+  keep it at **design_docs/PROJECT_DESCRIPTION.md**. Core §7 now names the path
   explicitly.
 
 - **2026-08-24 (B landed)**: All twenty member-crate docs moved into area
@@ -314,7 +315,7 @@ item's evidence.
 
   **Code links were repaired, not just doc links.** The moved docs pointed at
   mere's old `crates/inker/...` layout, which no longer exists anywhere; in
-  genet the code is `components/inker/...`, and nematic is a *top-level*
+  genet the code was `components/inker/...` *(historical citation)* <!-- doc-audit: historical-path -->, and nematic is a *top-level*
   component rather than sitting under `inker/engines/`. Eleven of twelve code
   paths were verified present before rewriting; the twelfth was found at its
   real location rather than guessed.
@@ -395,7 +396,7 @@ item's evidence.
   and a recommendation; extraction target confirmed as the archived-plan-tails
   plan, whose own header names it the single backlog for every pass; fifteen
   archive, one retire, one reclassified live — the kith plan, whose gate
-  cleared 2026-08-09 and which `crates/mesh/mesh/src/lease.rs:22-26` still
+  cleared 2026-08-09 and which `crates/mesh/mesh/src/lease.rs:22` still
   names as owing. **Banners**: thirty-one sorted — twenty banner with per-doc
   text in the tree's own dated-audit-note form (second layer where a
   2026-06-09 note exists, never replacing it), eight archive instead as
@@ -482,6 +483,25 @@ item's evidence.
   source documents. The remaining findings are dominated by historical donor
   paths and ambiguous ownership. D3 stays open until each remaining source is
   either explicitly historical or its current citations are proven.
+
+- **2026-09-06 (D3 closed):** a clean beside-siblings worktree reran the
+  complete active tree through the hardened checker. Exact archive/live-target
+  repairs landed first. Mere's policy addendum and checker then adopted visible,
+  occurrence-scoped `historical-*` and `planned-*` annotations, rejecting
+  detached, malformed, wrong-kind, and newly resolving markers; planted
+  controls cover those failure modes, Markdown code labels, inline literals,
+  nested-list links, and longer closing fences. Final receipt: 297 active docs,
+  296 indexed plus the index itself, and zero orphans, ghosts, private-memory
+  links, Status-less plans, broken relative links, missing known-root paths,
+  invalid annotations, or stale annotations. Informational inventory: 267
+  historical links, 474 historical paths, 2 planned links, and 15 planned
+  paths; 112 ambiguous-root examples, 37 glob/pattern examples, and 30
+  versioned protocol identifiers remain explicitly excluded. The self-test,
+  Python compilation, and `--fail-on-findings` gate pass. This closes D3 and
+  the platform-boundary plan's P7 dependency. It does not close this plan's
+  overall phase-D condition: D2's aggregate covers the 281-document 2026-09-02
+  snapshot, while the active tree now has 297 documents. The 16 additions need
+  D2 judgment blocks before phase D can be called complete.
 
 ### Finding: genet now has two doc homes
 
@@ -588,14 +608,14 @@ of them plans.
 - **Code-font paths**: 495 cited, roughly 260 absent at HEAD after
   correcting 13 `components/` paths the checker had tested against the wrong
   root (they resolve in genet). The absent set is dominated by the deleted
-  meerkat (20 citations), pre-rename `crates/persona` (12) and
-  `crates/orrery` (9), and the old `session-runtime`. Only 8 of the 138
+  meerkat (20 citations), pre-rename `crates/persona` *(historical citation)* <!-- doc-audit: historical-path --> (12) and
+  `crates/orrery` *(historical citation)* <!-- doc-audit: historical-path --> (9), and the old `session-runtime`. Only 8 of the 138
   citing docs carry the rename-key banner that makes such references
   deliberate; 130 do not. Live breaks worth naming: `ports/retinue-agent/*`
   (six citations from the reference host plan),
-  `ports/graphshell/src/bin/graphshell_device_host.rs` (replaced by djinn,
+  `ports/graphshell/src/bin/graphshell_device_host.rs` *(historical citation)* <!-- doc-audit: historical-path --> (replaced by djinn,
   per the resident consolidation plan), `ports/pelt`,
-  `ports/knot/src/editor.rs`, and five genet paths under the removed
+  `ports/knot/src/editor.rs` *(historical citation)* <!-- doc-audit: historical-path -->, and five genet paths under the removed
   `genet-layout`.
 - **Commit receipts**: 361 hashes cited; 348 resolve in some local repo. Of
   the 13 that do not, three are model revisions rather than commits; the ten
@@ -609,7 +629,7 @@ non-zero except ghosts; the ghost check shares the resolver that found the
 bracketed text followed by a parenthesised target — are seen (no
 reference-style links, no bare URLs; and a literal example of that syntax in
 prose reads as a link, which this very sentence tripped on 2026-09-02); the code-font path check
-requires a known leading segment (`crates/`, `ports/`, `apps/`,
+requires a known leading segment (`crates/`, `ports/`, **apps/**,
 `components/`, `src/`, `design_docs/`, `repos/`, `tests/`, `examples/`), so
 paths under other roots are unchecked, and bare `src/`, `tests/`,
 `examples/` paths are ambiguous without crate context and over-count; the

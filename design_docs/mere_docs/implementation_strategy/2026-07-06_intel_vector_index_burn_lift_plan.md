@@ -6,8 +6,8 @@ Lane 5 P5 wiring; deliberately its own plan because it lifts three consumers at
 once, not just arrangement.
 **Related**: [burn_utilization_brief](../research/2026-07-04_burn_utilization_brief.md)
 (Lane 1 GPU findings, Lane 5 force pass), [orrery_graph_intelligence_plan](2026-07-06_orrery_graph_intelligence_plan.md)
-(where the O(N²) affinity scan lives), `crates/intel/embed/src/index.rs` (the flat
-index this lifts), `crates/eidetic/eidetic-search` + `crates/intel/embed/src/canvas_search.rs`
+(where the O(N²) affinity scan lives), `crates/intel/embed/src/index.rs` *(historical citation)* <!-- doc-audit: historical-path --> (the flat
+index this lifts), `crates/intel/eidetic-search` + `crates/canvas/canvas/src/canvas_search.rs`
 (the other two consumers).
 
 ## The insight

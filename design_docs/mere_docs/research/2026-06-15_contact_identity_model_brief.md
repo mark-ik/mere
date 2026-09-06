@@ -25,9 +25,9 @@ frames decisions for a later phase.
   contacts are persona-scoped, so they sit under the gate chain.
 - [lexicon brief](../../2026-05-04_lexicon_brief.md) — *kith / kin* contact tiers.
 - Code: [`comms/src/model.rs`](../../../crates/shell/comms/src/model.rs),
-  [`murm/gazette`](../../../crates/murm/gazette/src/lib.rs),
-  [`murm/misfin`](../../../crates/murm/misfin/src/lib.rs),
-  [`persona/identity`](../../../crates/persona/identity/src/lib.rs).
+   [`murm/gazette`](../../../crates/murm/gazette/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link -->,
+   [`murm/misfin`](../../../crates/murm/misfin/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link -->,
+   [`persona/identity`](../../../crates/persona/identity/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link -->.
 
 ---
 
@@ -54,7 +54,7 @@ decides whether WebFinger can resolve it.
 
 - **Host-rooted** (`name@host`, trust via DNS + TLS): misfin (`mailbox@host`,
   cert-bound), email, XMPP, Matrix, gemini/gopher. WebFinger resolves this whole
-  family natively, and [`gazette`](../../../crates/murm/gazette/src/lib.rs)
+   family natively, and [`gazette`](../../../crates/murm/gazette/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link -->
   already fans one `acct:user@host` into misfin + gemini + gopher + ActivityPub +
   http endpoints.
 - **Key-rooted** (the pubkey *is* the identity, host optional): murm (author keys),

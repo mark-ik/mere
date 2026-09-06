@@ -15,7 +15,7 @@ cleanup — `OrreryCard` → `OrreryGnode`, `node_card_view` → `gnode_view`, t
 class → `.gnode`, `render_as_cards`/`set_render_as_cards` → `render_gnodes_as_dom`/
 `set_render_gnodes_as_dom`. See
 [node_card_summoning_design](../design/2026-07-01_node_card_summoning_design.md) for why (a node
-is not a card) and `crates/meerkat/src/window_view/views.rs`'s module doc for the current names.
+is not a card) and `crates/meerkat/src/window_view/views.rs` *(historical citation)* <!-- doc-audit: historical-path -->'s module doc for the current names.
 Left unedited below as the historical record of what the code was called at each session.
 
 *Original status: Planning (with Mark).* The orrery-as-element work (Phase 2 of the
@@ -29,7 +29,7 @@ draggable, content-typed objects into uniform label pills, and hardwired a node'
 one form. This plan generalizes the node's presentation into two pluggable, customizable
 layers, **representation** (what a node looks like) and **arrangement** (how nodes lay out),
 while the node's *truth* (content, identity, edges) stays authoritative in the kernel + DOM.
-**Code**: `crates/orrery/` (orrery + gyre), `crates/meerkat/` (render, window_view, input),
+**Code**: `crates/orrery/` *(historical citation)* <!-- doc-audit: historical-path --> (orrery + gyre), `crates/meerkat/` *(historical citation)* <!-- doc-audit: historical-path --> (render, window_view, input),
 `crates/platen/` (cartography dispatch).
 
 Sibling / converging docs:
@@ -89,7 +89,7 @@ and behavior; its *presentation* is experience-derived, and should be free:
   card). A node *cannot* be anything else. Generalize it to a per-node, customizable choice
   over an open set of forms.
 - **Arrangement** — how nodes position relative to each other. This substrate is mature: the
-  `crates/orrery/arrangements` registry + `apply_strategy_positions` apply a scene arrangement
+  `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> registry + `apply_strategy_positions` apply a scene arrangement
   each frame, and the [scriptable field regions plan](2026-06-13_scriptable_field_regions_plan.md)
   adds placed, scripted, localized arrangement rules. The delta for the vision (a scene picks an
   arrangement, nodes assume and keep assuming it, customizable) is mostly UX + per-scene
@@ -174,7 +174,7 @@ had).
 The arrangement layer is largely built. This plan does not rebuild it; it names the delta for
 the "scene picks an arrangement, nodes follow it" vision and points at the owners.
 
-- **`crates/orrery/arrangements`** is a real crate: an arrangement *registry* with *adapters*
+- **`crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path -->** is a real crate: an arrangement *registry* with *adapters*
   (grid, radial, penrose, phyllotaxis, lsystem written and dispatched; kanban, timeline,
   semantic_edge_weight, semantic_embedding written but not yet dispatched), the layout
   implementations that arrange node subsets.
@@ -233,7 +233,7 @@ data) plus targeted reads.
   drops the gnode + favicon layers (frame.rs:154-158) and the host draws cards instead. This
   is the seed to generalize into a per-node representation.
 - **The arrangement substrate is mature, and more built than first credited.**
-  `crates/orrery/arrangements` is a registry + adapters: grid, radial, penrose, phyllotaxis, and
+  `crates/orrery/arrangements` *(historical citation)* <!-- doc-audit: historical-path --> is a registry + adapters: grid, radial, penrose, phyllotaxis, and
   lsystem, plus **kanban, timeline, semantic_edge_weight, and semantic_embedding** already
   written. The orrery's `layout_strategy` + `apply_strategy_positions` apply the active arrangement
   each frame via `platen::project_orrery_strategy` (focus-aware for radial, a no-op under

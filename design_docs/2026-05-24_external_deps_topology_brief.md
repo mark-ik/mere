@@ -76,7 +76,7 @@ included.** A table naming a different owner is not an error; Cargo simply does
 not apply it and the build silently resolves from git instead of the local
 checkout. This has already cost real time twice, so it is worth stating: the
 owner moved `mark-ik` → `merely-made`, and on 2026-08-01
-`ports/graphshell/web/.cargo/config.toml` was still naming `mark-ik` for both
+`ports/graphshell/web/.cargo/config.toml` *(historical citation)* <!-- doc-audit: historical-path --> was still naming `mark-ik` for both
 genet and netrender, so every patch in it had been inert and the committed
 103 MB wasm artifact was built against the remotes rather than the sibling
 checkouts. Cargo does say so, as `patch ... was not used in the crate graph`.
@@ -172,7 +172,7 @@ value).
 history):** the `merge=weave` attribute is committed, but the driver
 definition is **local `.git/config` per clone** —
 `merge.weave.driver = ~/.cargo/bin/weave-driver %O %A %B %L %P` — and depends on
-`weave-driver` being installed (`~/.cargo/bin/`, via `crates/weave`). On a fresh
+`weave-driver` being installed (`~/.cargo/bin/`, via `crates/weave` *(historical citation)* <!-- doc-audit: historical-path -->). On a fresh
 clone or a machine without it installed, `merge=weave` is a dangling pointer and
 git **silently falls back** to its default merge. New clones need the driver
 installed + the local config set before weave actually engages.

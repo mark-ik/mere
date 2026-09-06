@@ -41,7 +41,7 @@ boundary. The radio, Reticulum, and queue work lands in the Retinue workspace.
 - Mere's current Reticulum adoption boundary:
   [`MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md)
 - Personae's shared delegation grammar:
-  `crates/persona/personae/src/delegation.rs`
+   `crates/persona/personae/src/delegation.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 
 ## Decisions
 
@@ -276,7 +276,7 @@ the actual board and supply path.
 
 - `firmware/heltec-v4-phy/Cargo.toml`
 - `firmware/heltec-v4-phy/src/main.rs`
-- `crates/tulle/src/direct_phy_serial.rs`
+- `crates/tulle/src/direct_phy_serial.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 
 Add mutually exclusive firmware features:
 
@@ -369,7 +369,7 @@ This is the first useful milestone.
 **Repository:** Retinue
 **Files:**
 
-- `crates/retinue/src/endpoint.rs`
+- `crates/retinue/src/endpoint.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 - focused endpoint tests
 
 Add `interface: InterfaceId` to `Accepted`. Preserve equivalent ingress
@@ -610,7 +610,7 @@ This is the second useful milestone.
 **Repository:** Retinue
 **Files:**
 
-- `crates/retinue/src/endpoint.rs`
+- `crates/retinue/src/endpoint.rs` *(historical citation)* <!-- doc-audit: historical-path -->
 - interface configuration and scheduler modules split out when the boundary is
   clear
 

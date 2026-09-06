@@ -1319,7 +1319,7 @@ relay, and reconnect receipts.
   assumption is documented but the probe violates it) — either the probe
   advertises one address or the carrier learns per-packet destinations; and
   the str0m `do_poll_output` recursion is an upstream-filing candidate.
-  Harness: `crates/probes/webrtc-ping` (standalone, `wasm-bindgen` pinned
+Harness: `crates/probes/webrtc-ping` *(historical citation)* <!-- doc-audit: historical-path --> (standalone, `wasm-bindgen` pinned
   =0.2.126 to match the installed CLI — an unpinned range resolves 0.2.127
   and fails binding generation after a clean compile).
 - **2026-08-26: C2 landed.** Core: `InviteV1` (bounded canonical encoding,

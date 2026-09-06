@@ -7,7 +7,7 @@ hulls-as-fields follow-up (§5), an adversarial review that corrected the archit
 conclusion, and a second critique that named the destination (§1, §5-§8): a **projection
 compiler and runtime for interactive surfaces**, portable across the product family. All
 critique claims code-verified before adoption (see Progress). No code changed this session.
-**Code touched (read-only survey)**: `crates/canvas/arrangements`, `crates/canvas/canvas`
+**Code touched (read-only survey)**: `crates/canvas/arrangements` *(historical citation)* <!-- doc-audit: historical-path -->, `crates/canvas/canvas`
 (underlay, cartography_scene, fields, sprite_hull), `crates/canvas/cartography` (strategy,
 request, projection), `crates/forme` (topology, SplitPanes), numen `field.rs`/`coupling.rs`,
 `turnstone/src/shell.rs`, `isometry-core/src/overmap.rs`, `woodshed-views/src/stage.rs`.
@@ -484,7 +484,7 @@ requirement; ViewIntent.dimension), `crates/canvas/cartography/src/projection.rs
 (projection_from_positions, identity_arrangement), `crates/canvas/canvas/src/cartography_scene.rs`
 (project_canvas_strategy positions-only; no host caller), `crates/canvas/canvas/src/fields.rs`
 (field-region interaction), `crates/canvas/canvas/src/sprite_hull.rs`,
-`crates/system/session-runtime/src/arrangement_facets.rs` (arrangement.position +
+`crates/system/pandect/src/arrangement_facets.rs` (arrangement.position +
 ARRANGEMENT_SPRITE_HULL), `crates/forme/forme/src/topology.rs` (visible_walk ignoring
 ProjectionLens), `crates/forme/forme/src/tree/layout.rs` (SplitPanes), numen
 `field.rs`/`coupling.rs`, `turnstone/src/shell.rs` (per-surface rasterize + ordered composite),

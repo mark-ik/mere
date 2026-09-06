@@ -8,8 +8,8 @@
 
 - [`2026-05-11_browser_multiplexer_framing.md`](2026-05-11_browser_multiplexer_framing.md) — §5.3 (`ViewIntent` persistence), §11.3 (referenced this partition as undecided). This brief resolves the partition.
 - [`2026-05-11_tearout_operations_brief.md`](2026-05-11_tearout_operations_brief.md) — branch and fork state live in short-term by default; consolidation is an affirmative gesture. The fork-model brief's substrate footnote depends on this brief's framing.
-- [`../implementation_strategy/2026-05-11_graph_session_manifest_plan.md`](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md) — long-term session state. The manifest itself is long-term; short-term state lives alongside it but isn't engram-shaped.
-- Eidetic's engram model: [`crates/eidetic/src/engram.rs`](../../../crates/eidetic/src/engram.rs).
+ - [`../implementation_strategy/2026-05-11_graph_session_manifest_plan.md`](../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md) — long-term session state. The manifest itself is long-term; short-term state lives alongside it but isn't engram-shaped.
+ - Eidetic's engram model: [eidetic engram](../../../crates/eidetic/src/engram.rs) *(historical citation)* <!-- doc-audit: historical-link -->.
 
 ---
 
@@ -45,7 +45,7 @@ Reasonably scoped list, growing as new consumers arrive:
 
 ### 3.2 Long-term
 
-- **Session manifests** — `GraphSessionManifest` per session is long-term (it's the durable session identity). Stored as JSON per the [manifest plan](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md), not as an engram, because manifests are mutable identity records and engrams are immutable.
+ - **Session manifests** — `GraphSessionManifest` per session is long-term (it's the durable session identity). Stored as JSON per the [manifest plan](../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md), not as an engram, because manifests are mutable identity records and engrams are immutable.
 - **Consolidated graph state** — the full `Graph` content of a session, at the moment of consolidation. One engram per consolidation event.
 - **Consolidated branches** — a branch's graphlet + its accumulated members, frozen into an engram. Reference-able by future graphlets, sessions, or moot tier work.
 - **Published forks** — forks the user has explicitly chosen to durably retain (vs. throwaway exploration forks).
@@ -108,7 +108,7 @@ Concrete defaults (configurable):
 
 ## 6. How this interacts with existing work
 
-### 6.1 The manifest plan ([implementation strategy](../implementation_strategy/2026-05-11_graph_session_manifest_plan.md))
+ ### 6.1 The manifest plan ([implementation strategy](../../archive_docs/2026-06-09_completed_plans/2026-05-11_graph_session_manifest_plan.md))
 
 Unchanged in its v0 scope. The manifest itself is long-term (JSON record of durable identity). The session's graph data on disk is **medium-term** as defined in §3.3 — survives restarts but isn't an engram until consolidated.
 

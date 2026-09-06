@@ -77,7 +77,7 @@ wins.
 
 ### 7. PROJECT_DESCRIPTION.md ownership
 
-`design_docs/PROJECT_DESCRIPTION.md` — inside the doc root, not at the
+**design_docs/PROJECT_DESCRIPTION.md** — inside the doc root, not at the
 repository root — is reserved for the maintainer. Do not edit it without
 explicit instruction. Treat it as authoritative and surface contradictions for
 discussion rather than resolving them silently.
@@ -126,6 +126,21 @@ working-principles section in that same session.
 Mere is the largest doc tree in the workspace and the only one with area roots,
 so §4's promotion rule is fully exercised here.
 
+### Active-tree citation audit
+
+Preserve an obsolete link or known-root path only when it is evidence rather
+than navigation. Mark that exact occurrence on the same line with visible
+`*(historical citation)*` text followed by
+`<!-- doc-audit: historical-link -->` for a Markdown link or
+`<!-- doc-audit: historical-path -->` for a code-font path.
+
+A deliberately not-yet-existing target uses visible `*(planned target)*` text
+with `<!-- doc-audit: planned-link -->` or
+`<!-- doc-audit: planned-path -->`. Use this only when the document commits to
+creating that exact target. These markers do not make the whole document or
+section historical or planned. Mere's active-tree audit fails detached,
+malformed, wrong-kind, and newly resolving annotations.
+
 ### Area roots
 
 Corrected 2026-08-24. The previous list named `platen_docs/`, which has never
@@ -157,7 +172,7 @@ mere/design_docs/
 └── archive_docs/                  ← superseded checkpoints
 ```
 
-**`cambium_docs/` founded 2026-09-03, ruled by Mark**, the day Cambium itself landed in this repository (platform boundary plan, P2). It collects two things that had scattered: the two live plans (`workbench_component_plan`, `host_ui_zoom_plan`) that moved with the code into `mere_docs/` as a two-document lodger, and `crates/cambium/docs/`, which was the member-crate scatter §4 forbids — the same defect the 2026-08-24 collapse fixed for the other nine `crates/*/design_docs/` directories.
+**`cambium_docs/` founded 2026-09-03, ruled by Mark**, the day Cambium itself landed in this repository (platform boundary plan, P2). It collects two things that had scattered: the two live plans (`workbench_component_plan`, `host_ui_zoom_plan`) that moved with the code into `mere_docs/` as a two-document lodger, and `crates/cambium/docs/` *(historical citation)* <!-- doc-audit: historical-path -->, which was the member-crate scatter §4 forbids — the same defect the 2026-08-24 collapse fixed for the other nine `crates/*/design_docs/` directories.
 
 Every root above corresponds to code that lives in this repository. That is an
 invariant now, not a coincidence — see below.
@@ -192,7 +207,7 @@ now live under the area roots above. Core §4 forbids reintroducing them.
 
 ### PROJECT_DESCRIPTION.md
 
-Mere has no `design_docs/PROJECT_DESCRIPTION.md`. Core §7's derivation rule is
+Mere has no **design_docs/PROJECT_DESCRIPTION.md**. Core §7's derivation rule is
 therefore inert here rather than violated; founding one is open work.
 
 ### Inheritance and migration (graphshell donor)
@@ -219,4 +234,4 @@ When pulling a donor doc's content into a mere doc:
 
 - **Mere** — product name (humble; "merely a browser!")
 - **Merely** — parent brand layer (adopted 2026-07-09, was Strophos; confirmed 2026-07-10 after a challenge round, see the lexicon brief's naming history). GitHub org **merely-made**, registered 2026-07-10 (bare `merely` taken).
-- **Crate names**: `mere`, `graphshell`, `verso-tile`, `inker`, `platen`, `nematic`, `murm`, `murmuring`, `moothold`, `mooting` (all reserved on crates.io 2026-05-04); `eidetic` (2026-05-07), `illume` (2026-06-27), `armillary` (2026-07-03) published at 0.0.x from the workspace; `errand` 0.1.0 published 2026-07-04 from its standalone repo (0.1.1/0.1.2 same day: guppy, then spartan/nex/misfin-send, delegated to the spec crates). Three smolweb protocol crates published 2026-07-04 from standalone repos, misfin-shaped, MIT: `spartan-protocol`, `nex-protocol`, `guppy-protocol` (bare names taken by unrelated projects; qualified per ecosystem convention). `misfin` promoted 2026-07-03 to the standalone [mark-ik/misfin](https://github.com/mark-ik/misfin) repo (spec-complete; name held in stewardship, transfers to the protocol author on request; 0.0.2/0.0.3 published 2026-07-04, MIT; 0.0.3 adds selectable TLS providers). `servitor` reserved 2026-07-17 (0.0.1 placeholder published from the standalone `repos/servitor`, MIT/Apache; the resident-helper unit per the participant gate + packs plan; local repo, no GitHub remote yet). `forme` was lost to an unrelated claimant (2026-02) — needs a new name if ever published.
+- **Crate names**: `mere`, `graphshell`, `verso-tile`, `inker`, `platen`, `nematic`, `murm`, `murmuring`, `moothold`, `mooting` (all reserved on crates.io 2026-05-04); `eidetic` (2026-05-07), `illume` (2026-06-27), `armillary` (2026-07-03) published at 0.0.x from the workspace; `errand` 0.1.0 published 2026-07-04 from its standalone repo (0.1.1/0.1.2 same day: guppy, then spartan/nex/misfin-send, delegated to the spec crates). Three smolweb protocol crates published 2026-07-04 from standalone repos, misfin-shaped, MIT: `spartan-protocol`, `nex-protocol`, `guppy-protocol` (bare names taken by unrelated projects; qualified per ecosystem convention). `misfin` promoted 2026-07-03 to the standalone [mark-ik/misfin](https://github.com/mark-ik/misfin) repo (spec-complete; name held in stewardship, transfers to the protocol author on request; 0.0.2/0.0.3 published 2026-07-04, MIT; 0.0.3 adds selectable TLS providers). `servitor` reserved 2026-07-17 (0.0.1 placeholder now lives at `crates/servitor`, MIT/Apache; the resident-helper unit per the participant gate + packs plan). `forme` was lost to an unrelated claimant (2026-02) — needs a new name if ever published.

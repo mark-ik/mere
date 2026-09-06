@@ -12,7 +12,7 @@
 - [`../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md`](../implementation_strategy/2026-05-07_moot_tiers_and_voluntary_hosting_brief.md) — orrery/moot/moothold/coalition tiers, voluntary hosting, tessera, cheesecloth pinning.
 - [`../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md`](../implementation_strategy/2026-05-10_graph_cluster_namespaces_brief.md) — graph-cluster-derived namespaces (the novel direction).
 - [`../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md`](../../murm_docs/technical_architecture/MURM_AS_BILATERAL.md) — murm boundary doc (predates the substrate pivot; see §5 contradictions).
-- [`../technical_architecture/2026-05-26_component_fit_map.md`](../technical_architecture/2026-05-26_component_fit_map.md) — confirms the p2p tier is dormant relative to the running app.
+- [`../../archive_docs/2026-06-09_pivot_superseded/2026-05-26_component_fit_map.md`](../../archive_docs/2026-06-09_pivot_superseded/2026-05-26_component_fit_map.md) — confirms the p2p tier is dormant relative to the running app.
 - [`../../2026-05-04_lexicon_brief.md`](../../2026-05-04_lexicon_brief.md) — *murm*/*murmur*/*moot*/*tessera*/*kith*/*kin* vocabulary.
 
 ---
@@ -23,15 +23,15 @@ In the lexicon, `murm` is the bilateral-comms supercrate, `murmuring` its protoc
 
 ## 1. Where we are (code reality, verified against the tree)
 
-The governing fact: the design corpus describes a federation; the code ships bilateral chat over a real pipe. Per the [component fit-map](../technical_architecture/2026-05-26_component_fit_map.md), the entire p2p tier is dormant relative to the running app, which today exercises only the graph/forme/inker/nematic slice.
+The governing fact: the design corpus describes a federation; the code ships bilateral chat over a real pipe. Per the [component fit-map](../../archive_docs/2026-06-09_pivot_superseded/2026-05-26_component_fit_map.md), the entire p2p tier is dormant relative to the running app, which today exercises only the graph/forme/inker/nematic slice.
 
 | Crate (path) | State | What is real |
 |---|---|---|
 | `transport` (`crates/murm/transport`) | **Built, tested** | `IrohTransport` on iroh 0.98: QUIC plus per-ALPN demux via iroh `Router`, with `iroh-blobs` and `iroh-gossip` served off the same endpoint. Byte round-trip, p2p blob fetch, and gossip-topic exchange all tested over loopback. Discovery is explicit `add_peer` only; n0-DNS deliberately unwired. Bridges the ed25519-dalek 2.x vs iroh-3.0-pre boundary via the raw seed. ~22 tests. |
 | `murm` / `murmuring` (`crates/murm`) | **Built, tested. It is Cable.** | BLAKE2b cabal-id derivation, signed posts, encode/decode/sign/verify, snapshot push/pull working over both the memory transport and real iroh. Tamper-in-transit fails verification as intended. Single bi-stream snapshot only; live broadcast is a TODO. Persistent store (fjall+redb+rkyv) scaffolded. ~13 + ~81 tests. |
-| `identity` (`crates/persona/identity`, 1,686 LOC) | **Built, tested, more than paper** | Master Ed25519 plus `derive_keypair` (BLAKE2b-256), `InMemoryProvider`. Vault skeleton (`vault.rs`: `IdentityVault<S>`, `Profile`, `IdentitySlot::{Direct,Bootstrap}`, `CredentialLineage`, `UnlockTier`, `IdentityStorage`). Production `PassphraseEncryptedStorage` (Argon2id KEK, ChaCha20-Poly1305). ~13 to 19 tests. |
-| `misfin` (`crates/murm/misfin`) | **Built, standalone** | Gemini-style mail client: rustls plus rcgen self-signed client certs, trust-on-first-use, send/receive. No dependency on the rest of the comms stack. |
-| `webfinger` (`crates/murm/webfinger`) | Present (de-nostr'd) | Discovery-endpoint scaffolding. |
+| `identity` (`crates/persona/identity` *(historical citation)* <!-- doc-audit: historical-path -->, 1,686 LOC) | **Built, tested, more than paper** | Master Ed25519 plus `derive_keypair` (BLAKE2b-256), `InMemoryProvider`. Vault skeleton (`vault.rs`: `IdentityVault<S>`, `Profile`, `IdentitySlot::{Direct,Bootstrap}`, `CredentialLineage`, `UnlockTier`, `IdentityStorage`). Production `PassphraseEncryptedStorage` (Argon2id KEK, ChaCha20-Poly1305). ~13 to 19 tests. |
+| `misfin` (`crates/murm/misfin` *(historical citation)* <!-- doc-audit: historical-path -->) | **Built, standalone** | Gemini-style mail client: rustls plus rcgen self-signed client certs, trust-on-first-use, send/receive. No dependency on the rest of the comms stack. |
+| `webfinger` (`crates/murm/webfinger` *(historical citation)* <!-- doc-audit: historical-path -->) | Present (de-nostr'd) | Discovery-endpoint scaffolding. |
 | `eidetic-iroh-fetcher` (`crates/eidetic`) | Thin companion | Fetches `BlobSource::Iroh` tickets via transport's iroh-blobs. The second iroh consumer. |
 | `moothold` / `mooting` (`crates/moot`) | **Stubs (61 LOC)** | Reservation only. The whole tier/federation/tessera/event-DAG/bridge edifice is unwritten. |
 

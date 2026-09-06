@@ -35,8 +35,8 @@ multi-window 5/6). This plan owns the **named purpose that remains**: the user-f
 gestures and the cross-graph drag, plus the carried open questions. It implements the
 [tear-out operations brief](../research/2026-05-11_tearout_operations_brief.md) on top of the
 banked substrate.
-**Code**: `crates/meerkat/` (input, chrome, window registry), `crates/graph/graph-kernel/`
-(subgraph copy), `crates/forme/forme/` (graphlets), `crates/shell/frame/`.
+**Code**: `crates/meerkat/` *(historical citation)* <!-- doc-audit: historical-path --> (input, chrome, window registry), `crates/graph/graph-kernel/`
+ (subgraph copy), `crates/forme/forme/` (graphlets), `crates/shell/frame/` *(historical citation)* <!-- doc-audit: historical-path -->.
 
 Cross-refs:
 
@@ -165,7 +165,7 @@ per-window focus) is Phase 3 / Slice 3 of that plan. The scouting that establish
 is preserved below.
 
 **Substrate scouted (2026-06-25).** The prior "grep found neither" note was a wrong path — forme
-lives at `crates/forme/forme`, not `crates/graph/forme`. At the right path the API is **first-class
+lives at `crates/forme/forme`, not `crates/graph/forme` *(historical citation)* <!-- doc-audit: historical-path -->. At the right path the API is **first-class
 and unit-tested**: `GraphletId`, `GraphletRef<N>`, `GraphletBinding::{UnlinkedSession, Linked,
 Branched}` (graphlet.rs), 9 `GraphletKind`s, `GraphletSpec`, projection specs, and full
 reconciliation types, with `GraphTree::add_graphlet` + fork transitions in reconciliation.rs.

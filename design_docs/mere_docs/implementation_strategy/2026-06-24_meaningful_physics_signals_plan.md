@@ -22,7 +22,7 @@ What we can feed, grounded in the actual surfaces. Split by whether a real produ
 
 ### Real now — per-node
 
-- **Content / fetch state** ([`meerkat::fetch::ContentState`](../../../crates/meerkat/src/fetch.rs)):
+- **Content / fetch state** ([`meerkat::fetch::ContentState`](../../../crates/meerkat/src/fetch.rs) *(historical citation)* <!-- doc-audit: historical-link -->):
   per node `Loading | Ready(Fetched) | Failed(String)` (plus a `tag()` → 0 none / 1 loading / 2 ready
   / 3 failed). The live "this node is working / done / errored" pulse. Aggregates to active-fetch and
   failed counts (a system signal too).
@@ -34,10 +34,10 @@ What we can feed, grounded in the actual surfaces. Split by whether a real produ
 
 ### Real now — system
 
-- **Sync** ([`SyncStatus`](../../../crates/meerkat/src/sync.rs)): per lane `syncing: bool`,
+- **Sync** ([`SyncStatus`](../../../crates/meerkat/src/sync.rs) *(historical citation)* <!-- doc-audit: historical-link -->): per lane `syncing: bool`,
   `ops_received`, `last_activity_ms`. The sync indicator is explicitly "a real operation count ... no
   placebo." Number of syncing lanes, total ops, recency.
-- **Observability spine** ([`observability.rs`](../../../crates/meerkat/src/observability.rs)): a
+- **Observability spine** ([`observability.rs`](../../../crates/meerkat/src/observability.rs) *(historical citation)* <!-- doc-audit: historical-link -->): a
   capped buffer of diagnostics / actor / probe / trace records with severities. Yields a recent event
   rate and a recent-error count; actor `started` / `ended` records = operation activity.
 - **Live operations** (the steward): `steward_rows()` enumerates live operations + the graph count.
@@ -45,7 +45,7 @@ What we can feed, grounded in the actual surfaces. Split by whether a real produ
 
 ### Contract exists, producer pending — per-node + per-edge
 
-[`cartography::signals::IntelligenceSignals`](../../../crates/orrery/cartography/src/signals.rs) is
+[`cartography::signals::IntelligenceSignals`](../../../crates/orrery/cartography/src/signals.rs) *(historical citation)* <!-- doc-audit: historical-link --> is
 already a narrow contract carrying exactly the richer per-node truth, consumed today by the
 `arrangements` layout adapters:
 
@@ -77,7 +77,7 @@ Most of this is wiring real signals into parameters that are already there. Two 
 ### Per-node truth reuses the node-material / size seams
 
 The orrery already exposes per-node physical seams cartography drives:
-[`set_node_material`](../../../crates/orrery/orrery/src/lib.rs) /
+[`set_node_material`](../../../crates/orrery/orrery/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link --> /
 `apply_cartography_materials` (restitution / friction / **density** = mass),
 `apply_cartography_sizing`, `set_node_states`, and the gyre `Simulation::set_node_materials` /
 `set_node_colliders` re-apply-to-live-bodies path. So "weight = importance," "size = degree," "heat =

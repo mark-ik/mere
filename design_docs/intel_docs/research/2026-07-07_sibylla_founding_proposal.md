@@ -50,7 +50,7 @@ and is `publish = false`. Two consumers now want it independently:
 - **Isometry** (a standalone Merely-stack app), for the RAG and
   semantic-recall half of the optional DM-loaded-model lane: retrieving relevant
   world and entity context to ground an NPC line or a recap. See isometry
-  `design_docs/2026-07-07_optional_intelligence_vision.md`; the generation half
+   `design_docs/2026-07-07_optional_intelligence_vision.md` *(historical citation)* <!-- doc-audit: historical-path -->; the generation half
   is vates, the retrieval half is this.
 
 Isometry consumes serval and netrender, not mere; it must not depend on mere to
@@ -63,7 +63,7 @@ prophecy, the consulted oracle, feminine sibling to the masculine *vates*.
 
 ## 3. Origin and what is ported
 
-Promoted from `mere/crates/intel/embed`. Ported in this founding commit, MPL
+Promoted from `mere/crates/intel/embed` *(historical citation)* <!-- doc-audit: historical-path -->. Ported in this founding commit, MPL
 headers intact, mere-internal doc references genericized:
 
 - `provider.rs`: the `EmbeddingProvider` trait, `SimilarityMetric`, `EmbedError`.
@@ -263,10 +263,10 @@ wgpu execution land behind features, mirroring vates.
 
 ## Provenance
 
-Grounded in a read of `mere/crates/intel/embed` (lib, provider, stub, Cargo.toml,
+Grounded in a read of `mere/crates/intel/embed` *(historical citation)* <!-- doc-audit: historical-path --> (lib, provider, stub, Cargo.toml,
 module map) 2026-07-07. The sibling crate vates was founded the same day
-(`repos/vates/design_docs/2026-07-07_vates_founding_proposal.md`); its section 7
+(`repos/vates/design_docs/2026-07-07_vates_founding_proposal.md` *(historical citation)* <!-- doc-audit: historical-path -->); its section 7
 scope note names embed as this separate sibling promotion. The name and the
 consumer-side vision are recorded in the isometry
-`design_docs/2026-07-07_optional_intelligence_vision.md` and the workspace
+`design_docs/2026-07-07_optional_intelligence_vision.md` *(historical citation)* <!-- doc-audit: historical-path --> and the workspace
 memory.

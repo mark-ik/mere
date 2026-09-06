@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/archive_docs/checkpoint_2026-04-17/verse_docs/technical_architecture/2026-04-17_verse_distributed_index_protocol_v0.1.md`
+> - Original path: `design_docs/archive_docs/checkpoint_2026-04-17/verse_docs/technical_architecture/2026-04-17_verse_distributed_index_protocol_v0.1.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `6ab4c22f`
 >
 > None of it was ever built. It is filed here as research, not as a plan and
@@ -23,7 +23,7 @@
 
 # Verse Distributed Index Protocol (VDIP) v0.1
 
-> Archived on 2026-04-17. Superseded by [2026-04-17_verse_graph_contribution_protocol_v0_1.md](../../../../verse_docs/technical_architecture/2026-04-17_verse_graph_contribution_protocol_v0_1.md). This file was moved from active Verse technical architecture docs into the archive checkpoint after VGCP replaced it as the active protocol authority.
+> Archived on 2026-04-17. Superseded by [2026-04-17_verse_graph_contribution_protocol_v0_1.md](2026-04-17_verse_graph_contribution_protocol_v0_1.md). This file was moved from active Verse technical architecture docs into the archive checkpoint after VGCP replaced it as the active protocol authority.
 
 **Status:** Draft v0.1
 **Document type:** Core protocol specification with reference profiles and Graphshell mapping
@@ -513,14 +513,14 @@ Public discovery overlays such as libp2p-based routing or other announcement fab
 
 The protocol is ahead of the current Graphshell implementation. These reuse points and gaps are the current boundary:
 
-- [../../../crates/graph-memory/src/lib.rs](../../../crates/graph-memory/src/lib.rs) and [../../../crates/graphshell-core/src/graph/mod.rs](../../../crates/graphshell-core/src/graph/mod.rs) express the local Entry/Visit/Owner-style navigation substrate. That substrate is not incidental to Verse; it is the source model for shareable communal graphlets.
+- [../../../crates/graph-memory/src/lib.rs](../../../crates/graph-memory/src/lib.rs) *(historical citation)* <!-- doc-audit: historical-link --> and [../../../crates/graphshell-core/src/graph/mod.rs](../../../crates/graphshell-core/src/graph/mod.rs) *(historical citation)* <!-- doc-audit: historical-link --> express the local Entry/Visit/Owner-style navigation substrate. That substrate is not incidental to Verse; it is the source model for shareable communal graphlets.
 - In that framing, `EntryCard` is the shareable projection of Entry identity, `VisitCard` is the shareable projection of situated occurrence, and `NavigationEdgeCard` is the shareable projection of communal traversal structure.
 - Graph-memory matters because it lets Verse preserve the web's collaborative shape without exporting private owner context. The protocol keeps communal graph structure while dropping owner-specific cursors and branches.
 
-- [../../../mods/native/verse/mod.rs](../../../mods/native/verse/mod.rs) already provides Ed25519-backed iroh identity, trusted-peer storage, and workspace-grant concepts that can seed community identity and admission work.
-- [../../../model/archive.rs](../../../model/archive.rs) already contains signed portable archive objects and privacy classes; that is a useful precedent for signed artifact envelopes, but it is not yet VDIP's object model.
-- [../../../app/clip_capture.rs](../../../app/clip_capture.rs) already exposes structured capture data from web content; this is a precursor to canonicalization, not the canonicalization pipeline itself.
-- [../../../services/query/mod.rs](../../../services/query/mod.rs) and [../../../services/facts/mod.rs](../../../services/facts/mod.rs) provide local structured querying over projected history facts, but they do not yet implement distributed graphlet exchange, split-package search, or community ranking.
+- [../../../mods/native/verse/mod.rs](../../../mods/native/verse/mod.rs) *(historical citation)* <!-- doc-audit: historical-link --> already provides Ed25519-backed iroh identity, trusted-peer storage, and workspace-grant concepts that can seed community identity and admission work.
+- [../../../model/archive.rs](../../../model/archive.rs) *(historical citation)* <!-- doc-audit: historical-link --> already contains signed portable archive objects and privacy classes; that is a useful precedent for signed artifact envelopes, but it is not yet VDIP's object model.
+- [../../../app/clip_capture.rs](../../../app/clip_capture.rs) *(historical citation)* <!-- doc-audit: historical-link --> already exposes structured capture data from web content; this is a precursor to canonicalization, not the canonicalization pipeline itself.
+- [../../../services/query/mod.rs](../../../services/query/mod.rs) *(historical citation)* <!-- doc-audit: historical-link --> and [../../../services/facts/mod.rs](../../../services/facts/mod.rs) *(historical citation)* <!-- doc-audit: historical-link --> provide local structured querying over projected history facts, but they do not yet implement distributed graphlet exchange, split-package search, or community ranking.
 
 Missing pieces before Graphshell can claim a VDIP implementation:
 
@@ -557,6 +557,6 @@ Missing pieces before Graphshell can claim a VDIP implementation:
 
 ## 18. References
 
-- [2026-04-16_verse_index_protocol_drafts.md](../../../../verse_docs/technical_architecture/2026-04-16_verse_index_protocol_drafts.md)
-- [VERSE_AS_NETWORK.md](../../../../verse_docs/technical_architecture/VERSE_AS_NETWORK.md)
-- [2026-02-23_verse_tier2_architecture.md](../../../../verse_docs/technical_architecture/2026-02-23_verse_tier2_architecture.md)
+- [2026-04-16_verse_index_protocol_drafts.md](../../../../verse_docs/technical_architecture/2026-04-16_verse_index_protocol_drafts.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [VERSE_AS_NETWORK.md](../../../../verse_docs/technical_architecture/VERSE_AS_NETWORK.md) *(historical citation)* <!-- doc-audit: historical-link -->
+- [2026-02-23_verse_tier2_architecture.md](../../../../verse_docs/technical_architecture/2026-02-23_verse_tier2_architecture.md) *(historical citation)* <!-- doc-audit: historical-link -->

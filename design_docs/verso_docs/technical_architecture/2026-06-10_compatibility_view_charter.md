@@ -2,7 +2,7 @@
 
 > **Consolidation note, 2026-09-02.** The crates this document names —
 > `verso`, `verso-api`, `verso-scry`, `verso-genet` — were consolidated into
-> the single `components/verso-tile` crate on 2026-07-09 (its `api`, `flip`
+> the single `components/verso-tile` *(historical citation)* <!-- doc-audit: historical-path --> crate on 2026-07-09 (its `api`, `flip`
 > and `scry` modules, plus the `genet-donor` feature). The paths below are
 > as of writing; the design they record is unchanged.
 **Date**: 2026-06-10
@@ -131,7 +131,7 @@ and cookies carried, the tile identity and lineage intact, and a flip-back
 that re-fetches with navigation-state carry.
 
 **Current crates**: retired 2026-06-10 (same day, after this charter landed).
-`crates/verso/` is deleted, `SurfaceTargetId` lives in `inker::routing`, and
+`crates/verso/` *(historical citation)* <!-- doc-audit: historical-path --> is deleted, `SurfaceTargetId` lives in `inker::routing`, and
 the dead deps are gone — receipt in the
 topology doc §9 (`mere/design_docs/mere_docs/technical_architecture/2026-05-19_workspace_topology_status.md`).
 The name is designated for this charter and is minted at step 3.

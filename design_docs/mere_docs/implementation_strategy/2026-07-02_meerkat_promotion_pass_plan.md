@@ -29,7 +29,7 @@ code), the archived
 (the precedent: own the seam, depend on components), the
 [meerkat CLI tooling plan](../../archive_docs/2026-07-03_completed_plans/2026-06-29_meerkat_cli_tooling_plan.md) (owns the
 agent_harness cluster; out of scope here), and the mere-domain layer direction
-(existing pane-domain crates live under `crates/platen/domain/` today, but the
+(existing pane-domain crates live under `crates/platen/domain/` *(historical citation)* <!-- doc-audit: historical-path --> today, but the
 second-pass review below narrows that as historical precedent rather than the
 durable home for every future data half).
 
@@ -185,7 +185,7 @@ view types currently leak into data.
   alike. **workbench** is platen's own projection domain and stays;
   **apparatus** merely landed there and migrates to `crates/domain/` whenever
   next touched. The phase had to start by dealing with the pre-existing
-  `crates/platen/domain/gloss` occupant rather than pretending the name was
+  `crates/platen/domain/gloss` *(historical citation)* <!-- doc-audit: historical-path --> occupant rather than pretending the name was
   free. Roster and gloss data have no platen affinity (kernel/forme and
   glossary material respectively), so sending them to platen would grow it into
   the grab-bag the accessory-orchestrator doctrine forbids. The old "wait for
@@ -220,7 +220,7 @@ view types currently leak into data.
   `gloss_outline_data.rs` and `gloss_outline_view.rs` depending on that neutral
   module. That is the first real move from "data imports a view type" toward the
   P8 target shape.
-- First domain slice landed 2026-07-03: the old `crates/platen/domain/gloss`
+- First domain slice landed 2026-07-03: the old `crates/platen/domain/gloss` *(historical citation)* <!-- doc-audit: historical-path -->
   crate was moved to the new top-level `crates/domain/gloss` home, and the
   host-neutral gloss vocabulary/geometry from `meerkat::gloss` moved into that
   crate. `meerkat` now depends on `gloss` directly for the outline snapshot
@@ -330,7 +330,7 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   embeddings/signals (wrong home for crawl); `crates/import` is browser-data
   import producing page seeds (right shape for web_clip);
   `crates/shell/chrome` is the designed home for chrome view-models;
-  `crates/platen/domain/workbench` plus the domain-side `apparatus`/`gloss`
+  `crates/platen/domain/workbench` *(historical citation)* <!-- doc-audit: historical-path --> plus the domain-side `apparatus`/`gloss`
   crates are the current pane-domain layout the second-pass P8 answer
   deliberately narrows; `meerkat-browser-worker`
   is a 109-LOC bootstrap that does not yet consume the transfer wire form (the
@@ -370,7 +370,7 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   plan sets the layout). Reworded the command.rs rationale from consumer-pull
   to host-vocabulary-by-nature.
 - **2026-07-03**: apparatus moved out of platen. The old
-  `crates/platen/domain/apparatus` crate now lives at the top-level
+  `crates/platen/domain/apparatus` *(historical citation)* <!-- doc-audit: historical-path --> crate now lives at the top-level
   `crates/domain/apparatus` home, matching the already-landed `gloss` and
   `roster` moves and leaving `platen` with only its own retained
   `workbench` domain.
@@ -380,7 +380,7 @@ Verified by grepping each candidate's `use` lines. "crate-refs" counts
   and `ContentUpdate`, so the post-P1/P2 compile will choose whether the new
   crate owns the content contract or just the wire forms. P4 now names the
   hidden `render::base64_encode` helper cut in `attach_cropped_visual`. P8 now
-  names the live `crates/platen/domain/gloss` occupant and adds an explicit
+  names the live `crates/platen/domain/gloss` *(historical citation)* <!-- doc-audit: historical-path --> occupant and adds an explicit
   input-snapshot prerequisite before the data/view inversion.
 - **2026-07-03**: P3's first implementation slice landed. Added
   `crates/system/content-contract` for the transferable content message

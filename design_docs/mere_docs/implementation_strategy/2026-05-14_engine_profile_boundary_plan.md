@@ -4,7 +4,7 @@
 **Status**: Implementation plan — v0a path-resolution primitive landed; v0b per-engine wiring pending
 
 > **Reconcile note (2026-07-03 archive pass):** `engine_profile_store.rs`
-> (`crates/system/session-runtime/`) now carries `engine_profile_path` /
+> (`crates/system/session-runtime/` *(historical citation)* <!-- doc-audit: historical-path -->) now carries `engine_profile_path` /
 > `engine_profile_path_for_session` with tests, so the primitive is live; per-engine UDF
 > wiring status (scrying/graft/weld each reference engine-profile types) was not
 > re-verified engine-by-engine. The engine list here predates the genet multiplexer
@@ -14,8 +14,8 @@
 **Related**:
 
 - [`../research/2026-05-11_browser_multiplexer_framing.md`](../research/2026-05-11_browser_multiplexer_framing.md) §5.4 — the framing brief that defines the tiered scoping.
-- [`crates/system/session-runtime/src/manifest.rs`](../../../crates/system/session-runtime/src/manifest.rs) — `EngineProfileBinding` enum (PersonaScoped / SessionScoped / GraphScoped), `PersonaId`, `GraphSessionManifest::engine_profile` are already in place.
-- [`crates/inker/src/engine.rs`](../../../crates/inker/src/engine.rs) — `Engine::engine_id() -> &str` is the stable engine identifier that names the UDF directory.
+- [crates/system/session-runtime/src/manifest.rs](../../../crates/system/session-runtime/src/manifest.rs) *(historical citation)* <!-- doc-audit: historical-link --> — `EngineProfileBinding` enum (PersonaScoped / SessionScoped / GraphScoped), `PersonaId`, `GraphSessionManifest::engine_profile` are already in place.
+- [crates/inker/src/engine.rs](../../../crates/inker/src/engine.rs) *(historical citation)* <!-- doc-audit: historical-link --> — `Engine::engine_id() -> &str` is the stable engine identifier that names the UDF directory.
 
 ---
 

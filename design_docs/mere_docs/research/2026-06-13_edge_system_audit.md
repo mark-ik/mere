@@ -57,10 +57,10 @@ Five write paths reach `assert_relation` and friends; four are machine-driven:
    `ingest/apply.rs` assert `Semantic` edges + open predicates from fetched
    JSON-LD.
 3. **Inker link-statements** —
-   [`statements.rs`](../../../crates/inker/src/statements.rs) asserts relations
+[`statements.rs`](../../../crates/inker/src/statements.rs) *(historical citation)* <!-- doc-audit: historical-link --> asserts relations
    from a document's typed links (knot `rel`s, etc.).
 4. **New-node-from-address** —
-   [`open_member_as_new_node`](../../../crates/orrery/orrery/src/input.rs) (the
+[`open_member_as_new_node`](../../../crates/orrery/orrery/src/input.rs) *(historical citation)* <!-- doc-audit: historical-link --> (the
    Ctrl/Cmd+Enter omnibar path) creates a *new* node and asserts a `hyperlink`
    edge from the origin to it.
 
@@ -74,7 +74,7 @@ The orrery is further along than the creation gap suggests:
 
 - **Multi-node selection**: Shift-click toggles nodes into
   `selected: HashSet<NodeKey>`
-  ([`orrery/input.rs`](../../../crates/orrery/orrery/src/input.rs)). Two-node
+([`orrery/input.rs`](../../../crates/orrery/orrery/src/input.rs) *(historical citation)* <!-- doc-audit: historical-link -->). Two-node
   selection — exactly what a relate gesture consumes — is already a thing.
 - **Edge selection**: marquee rect-select collects crossed edges; a bare click
   runs `edge_hit_test` and picks the edge under the cursor, into
@@ -112,7 +112,7 @@ delete a single mistaken relation while keeping both nodes.
 Edge management has three legs: create, retract, and *traverse*. Create and
 retract are now wired (`assert_selected_relation` / `retract_selected_relation`,
 the `AssertEdge` / `RetractEdge` commands, `>relate` / `>unrelate`). Traversal is
-not: [`roster::EdgeRow`](../../../crates/meerkat/src/roster.rs) carries
+not: [`roster::EdgeRow`](../../../crates/meerkat/src/roster.rs) *(historical citation)* <!-- doc-audit: historical-link --> carries
 `other_title`, `other_url`, and `other_member` per relation, but the live
 `roster_view` renders only direction + kind + title — `other_url` /
 `other_member` are unread (a dead-field warning). They are the hooks for "click a

@@ -4,7 +4,7 @@
 > repository (`Code/archive/graphshell`), whose entire `design_docs/` tree is
 > deleted at HEAD, so this text survives only in history.
 >
-> - Original path: `design_docs/verse_docs/research/SEARCH_FINDINGS_SUMMARY.md`
+> - Original path: `design_docs/verse_docs/research/SEARCH_FINDINGS_SUMMARY.md` *(historical citation)* <!-- doc-audit: historical-path -->
 > - Source commit: `04d68365`
 >
 > None of it was ever built. It is filed here as research, not as a plan and
@@ -37,9 +37,9 @@ Note: This file now lives in `verse_docs/`. Some links still assume the `design_
 ### Current Plan Status: **Deferred to Phase 3+**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510-L533) (Section 21: Future Architecture)
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L518)
-- [VERSE.md](VERSE.md)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510-L533) *(historical citation)* <!-- doc-audit: historical-link --> (Section 21: Future Architecture)
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L518) *(historical citation)* <!-- doc-audit: historical-link -->
+- [VERSE.md](VERSE.md) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
@@ -49,7 +49,7 @@ Note: This file now lives in `verse_docs/`. Some links still assume the `design_
 - Architecture explicitly designed for future modularity
 
 **Phase 3+: Planned Optional Modules**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Phase 2+: Optional modules
   - Local sync (file-based)
@@ -76,7 +76,7 @@ impl SyncBackend for LocalFilesystem { }
 - On open: Load latest session + replay unsaved deltas
 - No CRDT/OT (operational transformation) currently planned for MVP
 
-**Rationale (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md)):**
+**Rationale (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md) *(historical citation)* <!-- doc-audit: historical-link -->):**
 > "Local-first storage, with optional P2P sync later"  
 > "Personal/Local-First, Not Collaborative-First"
 
@@ -91,14 +91,14 @@ impl SyncBackend for LocalFilesystem { }
 ### Heavy Influence on Graphshell Architecture
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L491-L509) (Section 20: Process Isolation)
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L9-L100)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L491-L509) *(historical citation)* <!-- doc-audit: historical-link --> (Section 20: Process Isolation)
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L9-L100) *(historical citation)* <!-- doc-audit: historical-link -->
 - [DOC_README.md](../../DOC_README.md)
 
 **Findings:**
 
 **Process Isolation Pattern (from Firefox):**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L491):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L491) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Graph UI runs in compositor thread (trusted)
 Webviews run in sandboxed Servo processes (untrusted)
@@ -112,7 +112,7 @@ cargo run --release -- -M -S
 ```
 
 **Origin-Based Process Management (Servo's Model):**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L54):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L54) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "Firefox's approach (kill unused processes) more efficient than fixed pool + serialization"  
 > "No serialization latency (create/destroy processes, not serialize DOM)"
 
@@ -144,13 +144,13 @@ From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/techni
 ### Current Plan: **NOT PLANNED for MVP**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510-L533) (Modularity for future sync)
-- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100-L180)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L510-L533) *(historical citation)* <!-- doc-audit: historical-link --> (Modularity for future sync)
+- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100-L180) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
 **Explicit Non-Use in MVP:**
-From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L170):
+From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L170) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "No need for crdt/conflict resolution in MVP"
 > "Personal use case (one user, one machine) is primary"
 
@@ -185,8 +185,8 @@ Current approach for MVP:
 ### Current Plan: **NO DIRECT ARCHITECTURAL BORROWING, PARTIAL FEATURE INSPIRATION**
 
 **Key Files:**
-- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md) (Feature set comparisons)
-- [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md)
+- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md) *(historical citation)* <!-- doc-audit: historical-link --> (Feature set comparisons)
+- [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
@@ -201,7 +201,7 @@ No explicit architectural analysis of these products. No CRDT/sync patterns borr
 - **Google Docs/Office**: Real-time collaborative editing
 - **Graphshell MVP**: Single-user, local-first, graph-centric
 
-**Feature Inspiration (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md)):**
+**Feature Inspiration (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md) *(historical citation)* <!-- doc-audit: historical-link -->):**
 - Session management (like browser tabs, but explicit "sessions")
 - DOM inspector (similar to Obsidian web clipper)
 - Export formats: JSON, PNG, interactive HTML (similar to Obsidian)
@@ -224,13 +224,13 @@ No explicit architectural analysis of these products. No CRDT/sync patterns borr
 ### Current Plan: **Explicitly Mentioned for Phase 3+**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L518) (P2P sync options)
-- [verse_docs/VERSE.md](VERSE.md) (Phase 3 tokenization)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L518) *(historical citation)* <!-- doc-audit: historical-link --> (P2P sync options)
+- [verse_docs/VERSE.md](VERSE.md) *(historical citation)* <!-- doc-audit: historical-link --> (Phase 3 tokenization)
 
 **Findings:**
 
 **Direct Reference:**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L518):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L518) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Phase 2+: Optional modules
   - P2P sync (YaCy-style, Syncthing-like)
@@ -251,7 +251,7 @@ YaCy = peer-to-peer search engine where users share search indices.
 - Paired with token incentives (Phase 3 research)
 
 **Related Concept: Verse Indexers**
-From [verse_docs/VERSE.md](VERSE.md):
+From [verse_docs/VERSE.md](VERSE.md) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Peer roles:
 - Indexers/deduplicators: dedupe and index reports for efficient queries
@@ -266,16 +266,16 @@ This aligns with YaCy's distributed indexing model.
 ### Current Plan: **EXPLICITLY AVOIDED**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L55, #L221)
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L54-L67)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L55, #L221) *(historical citation)* <!-- doc-audit: historical-link -->
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L54-L67) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
 **Explicit Non-Implementation:**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L221):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L221) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "No explicit DOM serialization (too complex, Servo handles it)"
 
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L55):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L55) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "No serialization latency (create/destroy processes, not serialize DOM)"
 
 **Why Serialization Rejected:**
@@ -320,12 +320,12 @@ Only graph metadata serialized to JSON:
 ### Current Plan: **SANITIZATION + SERVO SANDBOXING**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L461-L478) (Section 19)
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L868)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L461-L478) *(historical citation)* <!-- doc-audit: historical-link --> (Section 19)
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L868) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
-**Decision from [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L461):**
+**Decision from [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L461) *(historical citation)* <!-- doc-audit: historical-link -->:**
 > "Sanitize user-visible data. Validate URLs. Trust Servo for webview sandboxing."
 
 **Implementation Strategy:**
@@ -382,13 +382,13 @@ fn validate_url(url: &str) -> Result<Url> {
 ### Current Plan: **PHASE 2 FEATURE, BASIC SUPPORT**
 
 **Key Files:**
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L348, #L539, #L606)
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md)
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L348, #L539, #L606) *(historical citation)* <!-- doc-audit: historical-link -->
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
 **Planned Export Formats:**
-From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L606):
+From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L606) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 - [ ] Export options (PNG, SVG, JSON)
 ```
@@ -403,21 +403,21 @@ From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/I
 | **Interactive HTML** | 3+ | Research | Standalone graphs with embedded webviews |
 
 **JSON Format Details:**
-From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L738):
+From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L738) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Serialization: serde_json
 Standard, readable
 ```
 
 **Save Performance Target:**
-From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L630):
+From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L630) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 Serialization: 10K graph < 500ms
 ```
 
 **Import Capabilities:**
 
-From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L496):
+From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L496) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 - [ ] Import from Chrome/Firefox bookmarks.html
 ```
@@ -439,14 +439,14 @@ From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/I
 ### Current Plan: **PHASE 2 FEATURE, PARTIALLY SPECIFIED**
 
 **Key Files:**
-- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L158-L180) (Section 6: Persistence)
-- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L291, #L529-L550)
-- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L180-L230)
+- [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L158-L180) *(historical citation)* <!-- doc-audit: historical-link --> (Section 6: Persistence)
+- [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L291, #L529-L550) *(historical citation)* <!-- doc-audit: historical-link -->
+- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L180-L230) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
 **Session Persistence Strategy:**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L160):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L160) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "Incremental saves with version control and session history"
 
 **Storage Structure:**
@@ -463,7 +463,7 @@ From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/techni
 ```
 
 **Auto-Save Mechanism:**
-From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L165):
+From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/technical_architecture/ARCHITECTURE_DECISIONS.md#L165) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 - Auto-save every 30 seconds (configurable)
 - Dirty tracking: Only changed nodes/edges written
@@ -472,13 +472,13 @@ From [ARCHITECTURE_DECISIONS.md](../../archive_docs/checkpoint_2026-02-01/techni
 - On open: Load latest session + replay unsaved deltas
 ```
 
-**Browsing History Types (from [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L277)):**
+**Browsing History Types (from [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L277) *(historical citation)* <!-- doc-audit: historical-link -->):**
 ```
 Edge types: Hyperlink (blue), Bookmark (green), History (gray), Manual (red)
 ```
 
 **Phase 2 Session Features:**
-From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L545-L548):
+From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/IMPLEMENTATION_ROADMAP.md#L545-L548) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 - [ ] Session history:
   - Track visited nodes (like browser history)
@@ -486,7 +486,7 @@ From [IMPLEMENTATION_ROADMAP.md](../../graphshell_docs/implementation_strategy/I
   - Clear history
 ```
 
-**Phase 3+ Concepts (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L220)):**
+**Phase 3+ Concepts (from [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L220) *(historical citation)* <!-- doc-audit: historical-link -->):**
 ```
 Option A: Each session is a separate graph file
 Option B: One graph with timestamps; can rewind/replay
@@ -506,25 +506,25 @@ Option C: Like browser history; can collapse old branches
 ### Current Plan: **PHASE 2+ OPTIONAL FEATURE, LOW PRIORITY**
 
 **Key Files:**
-- [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L207-L226)
-- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100-L130, #L275-L290)
+- [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L207-L226) *(historical citation)* <!-- doc-audit: historical-link -->
+- [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100-L130, #L275-L290) *(historical citation)* <!-- doc-audit: historical-link -->
 
 **Findings:**
 
 **Definition:**
-From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100):
+From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L100) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "Use ghost nodes to preserve structure when removing items"
 
 **Concept Explanation:**
-From [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L210):
+From [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L210) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "When you delete a node, keep the edges visible (as 'ghost edges'), but dim/style them differently"
 
 **Use Case:**
-From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L285):
+From [PROJECT_PHILOSOPHY.md](../../archive_docs/checkpoint_2026-01-29/PROJECT_PHILOSOPHY.md#L285) *(historical citation)* <!-- doc-audit: historical-link -->:
 > "Knowledge organization; you remove a page but want to remember it was related to others"
 
 **Implementation Recommendation (Phase 2):**
-From [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L220):
+From [COMPREHENSIVE_SYNTHESIS.md](../../archive_docs/checkpoint_2026-01-29/COMPREHENSIVE_SYNTHESIS.md#L220) *(historical citation)* <!-- doc-audit: historical-link -->:
 ```
 - Optional feature: "Show ghost connections" toggle
 - When node deleted, create "GhostEdge" (visual only, no target)

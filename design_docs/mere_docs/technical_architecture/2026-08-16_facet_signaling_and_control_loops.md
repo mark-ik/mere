@@ -103,7 +103,7 @@ rather than tags, for two verified reasons.
    entire node into the journal on every tick, and two participants signalling on
    one node would contend on the whole payload.
 2. **Tags export.** A node's tags project to RDF as `schema:keywords`
-   (`crates/eidetic/scholia/src/project.rs`). A decaying tag would publish a
+    (`crates/eidetic/scholia/src/project.rs` *(historical citation)* <!-- doc-audit: historical-path -->). A decaying tag would publish a
    transient interior signal as a permanent public descriptor.
 
 The resulting rule is compact. A **tag** says what a node *is*: durable,
