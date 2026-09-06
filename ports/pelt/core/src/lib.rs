@@ -365,6 +365,11 @@ impl<F: 'static> PeltController<F> {
         self.session.frame(self.viewport.0, self.viewport.1)
     }
 
+    /// External texture placements belonging to the most recently produced frame.
+    pub fn external_texture_draws(&self) -> &[inker::SessionExternalTextureDraw] {
+        self.session.external_texture_draws()
+    }
+
     pub fn scroll_by(&mut self, dx: f32, dy: f32) -> bool {
         self.session.scroll_by(dx, dy)
     }

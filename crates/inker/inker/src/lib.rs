@@ -85,10 +85,10 @@ pub use session_engine::{
     DocumentFindDirection, DocumentFindMatch, DocumentFindQuery, DocumentFindReveal,
     DocumentFindState, DocumentSession, DocumentZoomState, EngineKindIndex, EngineKinds,
     OutlineEntry, SessionButtonState, SessionClick, SessionCursor, SessionEffect, SessionEngine,
-    SessionError, SessionFocusDirection, SessionFormMethod, SessionFormSubmission, SessionIme,
-    SessionInput, SessionInputResult, SessionKey, SessionLink, SessionModifiers,
-    SessionNavigationCommand, SessionPointerButton, SessionRegistry, SessionScrollKey,
-    SessionSpawnRequest, SessionTextTarget,
+    SessionError, SessionExternalTextureDraw, SessionFocusDirection, SessionFormMethod,
+    SessionFormSubmission, SessionIme, SessionInput, SessionInputResult, SessionKey, SessionLink,
+    SessionModifiers, SessionNavigationCommand, SessionPointerButton, SessionRegistry,
+    SessionScrollKey, SessionSpawnRequest, SessionTextTarget,
 };
 pub use sniff::sniff_content_type;
 pub use statements::{LinkStatement, link_statements};
@@ -98,13 +98,13 @@ pub use surface_engine::{
     EngineProfileBinding, FocusReason, FrameHandleOwnership, HttpAuthenticationAnswer,
     HttpAuthenticationChallenge, HttpCredentials, HttpProtectionSpace, KeyboardEvent,
     KeyboardModifiers, MouseButton, MouseEvent, MouseEventKind, NativeSurfaceHost,
-    NativeTextureHandle, NavigationEvent, OwnedSurfaceFrame, PermissionAnswer, PermissionDescriptor,
-    PermissionRequest, PermissionState, PhysicalPosition, PointerButtons, PointerEvent,
-    PointerInputCapabilities, PointerPhase, PointerType, SameSite, ScriptCapabilities,
-    SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame, SurfaceProducer,
-    SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, SurfaceTextureFormat,
-    UserAgentRequestId, WebFrameTransportMode, WebMessage, WebSurface, WebSurfaceCapabilities,
-    WebRequestId, WebSurfaceEvent,
+    NativeTextureHandle, NavigationEvent, OwnedSurfaceFrame, PermissionAnswer,
+    PermissionDescriptor, PermissionRequest, PermissionState, PhysicalPosition, PointerButtons,
+    PointerEvent, PointerInputCapabilities, PointerPhase, PointerType, SameSite,
+    ScriptCapabilities, SurfaceEngine, SurfaceEngineRegistry, SurfaceError, SurfaceFrame,
+    SurfaceProducer, SurfaceSettings, SurfaceSpawnRequest, SurfaceSyncHandle, SurfaceTextureFormat,
+    UserAgentRequestId, WebFrameTransportMode, WebMessage, WebRequestId, WebSurface,
+    WebSurfaceCapabilities, WebSurfaceEvent,
 };
 
 /// Crate version.

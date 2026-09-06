@@ -51,7 +51,7 @@ scripted = [
     "present", "livery", "genet-documents/scripted",
     "dep:genet-scripted",
     "dep:script-runtime-api", "dep:script-engine-api",
-    "dep:script-engine-boa",
+    "dep:script-engine-boa", "dep:webgl_wgpu",
     "dep:fleece",
 ]
 # Compatibility feature spelling; the scripted route is already Livery/Buckram.
@@ -220,6 +220,7 @@ ash = "0.38"
 
 
 [dev-dependencies]
+genet-render-host = { workspace = true }
 # The fixture-5 receipt inspects the concrete retained resource-ledger types
 # returned by `LiveryDocumentSession::resource_set()`.
 genet-document-resources = { workspace = true }
