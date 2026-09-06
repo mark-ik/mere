@@ -119,6 +119,14 @@ impl WebGlHandler for PeltWebGl {
     fn external_texture_key(&self) -> Option<u64> {
         Some(self.key)
     }
+    fn resize(&mut self, width: u32, height: u32) {
+        if self.context.resize(width.max(1), height.max(1)).is_ok() {
+            self.registry
+                .lock()
+                .expect("Pelt WebGL texture registry poisoned")
+                .insert(self.key, self.context.texture().texture.clone());
+        }
+    }
     fn clear_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
         self.clear = [r, g, b, a]
     }
@@ -365,6 +373,17 @@ mod tests {
               const gl = document.getElementById('canvas').getContext('webgl');
               gl.clearColor(1, 0, 0, 1);
               gl.clear(gl.COLOR_BUFFER_BIT);
+              const same = gl;
+              document.getElementById('canvas').width = 32;
+              const reset = gl.readPixels(0, 0, 1, 1, 0, 0);
+              document.getElementById('canvas').width = 8;
+              document.getElementById('canvas').setAttribute('height', '6');
+              gl.clear(gl.COLOR_BUFFER_BIT);
+              document.title = [
+                same === document.getElementById('canvas').getContext('webgl'),
+                gl.drawingBufferWidth, gl.drawingBufferHeight,
+                reset[0], reset[1], reset[2], reset[3]
+              ].join(':');
             </script>
         "#;
         let mut doc =
@@ -379,12 +398,16 @@ mod tests {
             )
             .expect("ordinary scripted document loads");
 
+        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0"));
+
         let frame = doc.frame_with_external_textures(WIDTH, HEIGHT);
         assert_eq!(frame.external_textures.len(), 1);
         let draw = &frame.external_textures[0];
         assert_eq!(draw.dest_rect, [0.0, 0.0, 32.0, 32.0]);
         assert!(draw.scene_op_boundary < frame.scene.ops.len());
         let key = draw.texture_key;
+        let resized = registry.texture(key).expect("resized canvas texture");
+        assert_eq!((resized.width(), resized.height()), (8, 6));
         let textures: Vec<_> = frame
             .external_textures
             .iter()
