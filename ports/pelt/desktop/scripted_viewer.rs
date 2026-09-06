@@ -243,6 +243,13 @@ mod tests {
         use crate::static_viewer::windowed::ViewerContent;
 
         const RESPONSE: &str = "Pelt deferred fetch receipt 6d7357";
+        let core = genet_render_host::RenderCore::boot(netrender::NetrenderOptions {
+            tile_cache_size: Some(16),
+            enable_vello: true,
+            ..Default::default()
+        })
+        .expect("receipt render core boots");
+
         let listener = TcpListener::bind("127.0.0.1:0").expect("local receipt server binds");
         listener
             .set_nonblocking(true)
@@ -260,6 +267,9 @@ mod tests {
                     },
                     Err(error) => panic!("local receipt accept failed: {error}"),
                 };
+                stream
+                    .set_read_timeout(Some(Duration::from_secs(2)))
+                    .expect("bounded request read");
                 let mut request = [0; 2048];
                 let count = stream.read(&mut request).expect("receipt request reads");
                 let request = String::from_utf8_lossy(&request[..count]);
@@ -294,12 +304,6 @@ mod tests {
         let url = format!("http://{address}/index.html");
         let config = StaticViewerConfig::new(EngineProfile::Scripted, WindowingMode::Headed, url)
             .with_size(160, 80);
-        let core = genet_render_host::RenderCore::boot(netrender::NetrenderOptions {
-            tile_cache_size: Some(16),
-            enable_vello: true,
-            ..Default::default()
-        })
-        .expect("receipt render core boots");
         let mut content = ScriptedViewerContent::<script_engine_boa::BoaEngine>::new(
             &config,
             inker::routing::ENGINE_GENET_SCRIPTED,
