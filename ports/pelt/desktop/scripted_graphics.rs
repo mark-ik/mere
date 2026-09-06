@@ -22,6 +22,7 @@ const VERTEX_SHADER: u32 = 0x8B31;
 const FRAGMENT_SHADER: u32 = 0x8B30;
 const DITHER: u32 = 0x0BD0;
 const SCISSOR_TEST: u32 = 0x0C11;
+const MAX_DRAWING_BUFFER_AXIS: u32 = 2048;
 
 #[derive(Clone, Default)]
 pub(crate) struct WebGlTextureRegistry {
@@ -119,13 +120,17 @@ impl WebGlHandler for PeltWebGl {
     fn external_texture_key(&self) -> Option<u64> {
         Some(self.key)
     }
-    fn resize(&mut self, width: u32, height: u32) {
-        if self.context.resize(width.max(1), height.max(1)).is_ok() {
-            self.registry
-                .lock()
-                .expect("Pelt WebGL texture registry poisoned")
-                .insert(self.key, self.context.texture().texture.clone());
-        }
+    fn resize(&mut self, width: u32, height: u32) -> Option<(u32, u32)> {
+        let size = (
+            width.max(1).min(MAX_DRAWING_BUFFER_AXIS),
+            height.max(1).min(MAX_DRAWING_BUFFER_AXIS),
+        );
+        self.context.resize(size.0, size.1).ok()?;
+        self.registry
+            .lock()
+            .expect("Pelt WebGL texture registry poisoned")
+            .insert(self.key, self.context.texture().texture.clone());
+        Some(size)
     }
     fn clear_color(&mut self, r: f32, g: f32, b: f32, a: f32) {
         self.clear = [r, g, b, a]
@@ -378,11 +383,14 @@ mod tests {
               const reset = gl.readPixels(0, 0, 1, 1, 0, 0);
               document.getElementById('canvas').width = 8;
               document.getElementById('canvas').setAttribute('height', '6');
+              document.getElementById('canvas').width = 4294967295;
+              const bounded = [gl.drawingBufferWidth, gl.drawingBufferHeight];
+              document.getElementById('canvas').width = 8;
               gl.clear(gl.COLOR_BUFFER_BIT);
               document.title = [
                 same === document.getElementById('canvas').getContext('webgl'),
                 gl.drawingBufferWidth, gl.drawingBufferHeight,
-                reset[0], reset[1], reset[2], reset[3]
+                reset[0], reset[1], reset[2], reset[3], bounded.join('x')
               ].join(':');
             </script>
         "#;
@@ -398,7 +406,7 @@ mod tests {
             )
             .expect("ordinary scripted document loads");
 
-        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0"));
+        assert_eq!(doc.title().as_deref(), Some("true:8:6:0:0:0:0:2048x6"));
 
         let frame = doc.frame_with_external_textures(WIDTH, HEIGHT);
         assert_eq!(frame.external_textures.len(), 1);
