@@ -2808,3 +2808,49 @@ matter of picking the hour; the Workbench W4 receipts are on genet main.
   final pins has not been claimed. Strict lint closure and broader WebGL/WPT
   conformance remain open as stated in the canonical receipt. The work is on
   `codex/scripted-host-capabilities-20260906`, preserving concurrent main work.
+
+- 2026-09-06: **Scripted host second wave.** Genet source
+  `b4af4f9d473f6dc1645dbd119ce27847c188c36a` adds host-confirmed live canvas
+  drawing-buffer resizing. Pelt replaces the external texture under its
+  existing registry key, retains CSS presentation bounds and supplies a
+  caller-selected size limit. The shared native contract serves Boa and Vano
+  without engine-repository changes. Initial context size negotiation,
+  namespace-aware attribute mutations and broader WebGL composition remain
+  separate gates.
+
+  Genet also records one frozen WPT fail-to-pass for inside decimal markers,
+  with zero regressions across 504 list tests. The source commits, exact maps,
+  native tests and remaining scope are recorded in the canonical Genet
+  scripted-host plan above. The dependency audit found that the consumed
+  Knot revision still introduced older `fleece` and `layout-dom-api` packages;
+  its narrow dependency branch preserves the consumed application code while
+  aligning those Genet pins. This does not validate the standalone Knot app.
+
+  The final embedded graph pins Knot
+  `e2294ed94faa9f5d046e11ba9e6b0861b6621cbd` and all 43 Genet selectors to
+  `b4af4f9d473f6dc1645dbd119ce27847c188c36a`, including excluded web examples.
+  Full config-free default metadata resolves 26 Genet packages at that
+  revision; enabling `pelt-desktop/scripted` resolves 41, all at the same pin,
+  with one registry wgpu 30.0.1 identity. The Knot lock retains its original
+  registry package versions; Mere likewise retains the registry identities
+  from the initial published-graph audit. The standalone Knot lock still
+  includes older Genet through its unchanged Mere dependency and has its own
+  integration gate. Mere lock SHA-256 is
+  `d524b69a14b2181937f917321118913b50f8c97254d9c548578500dfd3a1b898`.
+  `cargo check -p knot-editor --lib --locked --offline -j1` also passes from
+  the Mere workspace against those published pins, validating the embedded
+  library and its shared types.
+
+  All five Pelt scripted tests pass on this config-free published graph,
+  including actual 32 x 6 bounded size reporting, the final 8 x 6 registered
+  texture, unchanged CSS bounds, literal GPU composition pixels and texture
+  retirement. A test-only `title()` call was corrected to assert through the
+  existing script-evaluation API. The validated Mere source is
+  `ec35fd6ceb02469fcc47292635ea687316bc12fb`.
+
+  Formatting and diff checks pass. Scoped strict Clippy still reports 16
+  existing errors in the unchanged workspace-viewer and scripted-viewer
+  files; lint closure is not claimed. The second-wave native receipt is
+  frozen separately under the workspace testing root at
+  `testing/genet/host-receipts/2026-09-06-scripted-host-wave2/`, with commands,
+  logs, locks, metadata and source identities in its manifest.
