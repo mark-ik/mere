@@ -205,7 +205,11 @@ impl ScriptFetchHandler {
         let (tx, rx) = std::sync::mpsc::channel();
         Self {
             http,
-            origin: url::Url::parse(document_url).ok().map(|url| url.origin()),
+            origin: Some(
+                url::Url::parse(document_url)
+                    .map(|url| url.origin())
+                    .unwrap_or_else(|_| url::Origin::new_opaque()),
+            ),
             tx,
             rx: Mutex::new(rx),
             active: Mutex::new(std::collections::HashMap::new()),
@@ -587,6 +591,28 @@ mod tests {
         assert!(matches!(
             await_event(&handler),
             FetchEvent::Failed { id: 11, .. }
+        ));
+        foreign.assert();
+    }
+
+    #[test]
+    fn bare_path_document_uses_an_opaque_origin_for_cors() {
+        let mut foreign_server = mockito::Server::new();
+        let foreign = foreign_server
+            .mock("GET", "/private")
+            .with_status(200)
+            .with_body("must not be exposed")
+            .create();
+        let handler =
+            ScriptFetchHandler::new(r"C:\pages\local.html", ResourceFetchPolicy::default());
+        assert!(
+            handler
+                .start(13, request(format!("{}/private", foreign_server.url())))
+                .is_none()
+        );
+        assert!(matches!(
+            await_event(&handler),
+            FetchEvent::Failed { id: 13, .. }
         ));
         foreign.assert();
     }
